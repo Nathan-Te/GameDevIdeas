@@ -39,18 +39,18 @@ Objectif du lot : une idée peut être créée, listée, éditée et jugée depu
 
 ### Tests
 
-29 tests `node:test`, tous verts, une base SQLite en mémoire par test :
+30 tests `node:test`, tous verts, une base SQLite en mémoire par test :
 
 | Fichier | Ce qu'il couvre |
 |---|---|
 | `ideas.test.js` | création et valeurs par défaut, slug unique, validation des énumérations, lecture, patch partiel, `price_cents` remis à `null`, resynchronisation et figement du slug, soft delete, filtres, tris, verdict courant joint, 404 JSON |
 | `verdicts.test.js` | ajout, bornes 0-5, refus des scores non entiers, historique antéchronologique, cloisonnement entre idées, 404 sur idée absente ou supprimée |
-| `migrations.test.js` | schéma créé, idempotence, colonnes anticipant le lot 2, contrainte `CHECK` du score en SQL direct |
+| `migrations.test.js` | schéma créé, idempotence, colonnes anticipant le lot 2, contrainte `CHECK` du score en SQL direct, `npm run migrate` de bout en bout |
 | `static.test.js` | repli SPA, JSON préservé sous `/api`, asset produit après le démarrage |
 
 ### Docker
 
-`docker compose up --build` suffit : build du front, migrations au démarrage, volumes `./data/db` et `./data/files`, port `3000:3000`, healthcheck. Vérifié sur ce poste : création d'idée et de verdict dans le conteneur, deep link servi, données conservées après `docker compose restart` sans rejouer les migrations, image finale de 263 Mo.
+`docker compose up --build` suffit : build du front, migrations au démarrage, volumes `./data/db` et `./data/files`, port `3000:3000`, healthcheck. Vérifié sur ce poste : création d'idée et de verdict dans le conteneur, deep link servi, données conservées après `docker compose restart` sans rejouer les migrations, image finale de 266 Mo. Le conteneur tourne sur Node 24, la même LTS que le poste.
 
 ---
 
@@ -89,7 +89,7 @@ Objectif du lot : une idée peut être créée, listée, éditée et jugée depu
 | Dépendance | Pourquoi |
 |---|---|
 | `fastify` | Imposée par le seed. Serveur HTTP et validation par schéma JSON. |
-| `better-sqlite3` | Imposée par le seed. API synchrone, ce qui convient à une application mono-utilisateur et rend les migrations triviales. |
+| `better-sqlite3` | Imposée par le seed. API synchrone, ce qui convient à une application mono-utilisateur et rend les migrations triviales. Version 12.x : elle embarque une binaire précompilée pour Node 24, donc aucune chaîne C++ n'est nécessaire à l'installation. |
 | `@fastify/static` | Imposée par le seed pour servir le build front. |
 | `ajv` | Le compilateur de schémas de Fastify. Déclaré explicitement parce que `server/src/validation.js` instancie ses deux AJV lui-même (voir « Les choix faits ») ; s'appuyer sur une dépendance transitive serait fragile. Déjà présent dans l'arbre, coût d'installation nul. |
 
@@ -120,7 +120,7 @@ Aucune dépendance de routage, d'état global, de framework CSS ni d'ORM. Le see
 4. **`family` est fermée côté API** à l'énumération du seed, alors que le seed la décrit comme « libre mais suggérée ». Une valeur hors liste est refusée en 400. Ouvrir demande une décision : champ libre avec suggestions, ou liste éditable.
 5. **Aucun test front.** Conforme au seed (« aucun test front en v1 »). Les parcours de la page idée ont été vérifiés à la main dans un navigateur piloté ; le détail est dans la checklist ci-dessous.
 6. **Pas d'authentification**, conforme au seed : l'accès passe par Tailscale. Le port 3000 est publié sur toutes les interfaces par `docker-compose.yml` — à restreindre à l'interface Tailscale si la machine est exposée.
-7. **Node 20 minimum.** Le poste de développement tourne encore sur Node 14.16, qui ne sait exécuter ni `node:test`, ni Fastify 5, ni Vite 6. Le développement de ce lot s'est fait avec un Node 22 temporaire. **Installe une version LTS récente avant de lancer `npm run dev` ou `npm test`** ; `docker compose up` n'est pas concerné, le conteneur embarque son propre Node 22.
+7. **Module natif et version de Node.** `better-sqlite3` est compilé pour une version précise de l'ABI Node. Changer de version majeure de Node sans relancer `npm install` produit une erreur `ERR_DLOPEN_FAILED` (« compiled against a different Node.js version »). C'est arrivé au passage de Node 14 à Node 24 sur le poste de Nathan : `npm install` a suffi à corriger. Le `Dockerfile` utilise la même LTS, Node 24, pour que le conteneur et le poste ne divergent pas.
 
 ---
 

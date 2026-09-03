@@ -18,7 +18,9 @@ L'application est sur <http://localhost:3000>. La base et les fichiers sont dans
 
 ### En développement
 
-Node 20 ou plus est requis.
+Node 20 ou plus est requis. Le projet est développé et conteneurisé sur Node 24 LTS.
+
+Si tu changes de version majeure de Node, relance `npm install` : `better-sqlite3` est un module natif, lié à une version précise de l'ABI Node.
 
 ```bash
 npm install

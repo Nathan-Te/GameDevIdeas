@@ -7,7 +7,7 @@
 # --- Étage 1 : dépendances de production ------------------------------------
 # `better-sqlite3` récupère une binaire précompilée quand il en existe une pour
 # la plateforme ; la chaîne C++ n'est là que comme filet de sécurité.
-FROM node:22-slim AS deps
+FROM node:24-slim AS deps
 WORKDIR /app
 
 RUN apt-get update \
@@ -21,7 +21,7 @@ COPY web/package.json ./web/
 RUN npm ci --omit=dev
 
 # --- Étage 2 : build du front ------------------------------------------------
-FROM node:22-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -34,7 +34,7 @@ COPY web/ ./web/
 RUN npm run build --workspace web
 
 # --- Étage 3 : image finale --------------------------------------------------
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \

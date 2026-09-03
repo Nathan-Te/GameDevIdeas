@@ -31,7 +31,7 @@ docker compose up --build    # l'application complète sur http://localhost:3000
 
 En développement, on travaille sur `http://localhost:5173` : Vite sert le front et proxifie `/api` vers Fastify. En production, Fastify sert `web/dist` en statique avec repli SPA.
 
-Node 20 ou plus est requis (`node:test`, Fastify 5, Vite 6).
+Node 20 ou plus est requis (`node:test`, Fastify 5, Vite 6) ; le développement se fait sur Node 24 LTS, la même version que le conteneur.
 
 ## Convention des migrations
 
