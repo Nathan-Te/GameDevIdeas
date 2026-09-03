@@ -1,0 +1,29 @@
+# `docker compose up --build` doit suffire : build du front, migrations au
+# démarrage, application disponible sur http://localhost:3000.
+
+services:
+  vitrine:
+    build: .
+    image: vitrine:latest
+    container_name: vitrine
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # La base et les fichiers utilisateur survivent à toute reconstruction.
+      - ./data/db:/app/data/db
+      - ./data/files:/app/data/files
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: 0.0.0.0
+      DATA_DB_DIR: /app/data/db
+      DATA_FILES_DIR: /app/data/files
+      SERVE_STATIC: "true"
+      LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ideas').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

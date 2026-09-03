@@ -1,0 +1,21 @@
+# dépendances
+node_modules/
+
+# builds
+dist/
+web/dist/
+
+# données locales (base SQLite + fichiers utilisateur)
+data/
+
+# environnement
+.env
+.env.local
+
+# divers
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+coverage/
+.vite/

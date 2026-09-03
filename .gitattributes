@@ -1,0 +1,7 @@
+# Le dépôt est cloné sous Windows mais le code tourne sous Linux en conteneur :
+# les fins de ligne sont normalisées en LF dans l'index.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
