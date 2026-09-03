@@ -33,6 +33,22 @@ export function formatPrice(cents: number | null): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 }
 
+/** Poids d'un fichier, en unités binaires. `null` pour un lien : rien à afficher. */
+export function formatSize(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '';
+  if (bytes < 1024) return `${bytes} o`;
+
+  const units = ['ko', 'Mo', 'Go'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)} ${units[unit]}`;
+}
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;

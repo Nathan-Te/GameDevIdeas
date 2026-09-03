@@ -25,6 +25,20 @@ export const config = {
   dbDir,
   filesDir: fromRoot(env.DATA_FILES_DIR || './data/files'),
 
+  /**
+   * Taille maximale d'un fichier envoyé, en mégaoctets. Au-delà, la requête est
+   * refusée en 413 et le fichier partiellement écrit est effacé.
+   */
+  maxUploadMb: Number(env.MAX_UPLOAD_MB || 50),
+
+  /**
+   * Aller chercher le titre de la page pour libeller un lien collé sans label.
+   * Le serveur appelle alors le domaine collé par Nathan : on peut couper cet
+   * appel sortant (instance sans accès Internet, ou par principe). Le libellé
+   * retombe sur le nom de domaine.
+   */
+  linkTitleLookup: bool(env.LINK_TITLE_LOOKUP, true),
+
   migrationsDir: resolve(repoRoot, 'server', 'migrations'),
   webDist: fromRoot(env.WEB_DIST || './web/dist'),
 

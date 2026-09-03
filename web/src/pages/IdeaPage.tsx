@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, ApiError } from '../api';
+import { Attachments } from '../components/Attachments';
 import { formatDate, formatDateTime, formatPrice } from '../components/badges';
 import { EditableText } from '../components/EditableText';
 import { Link, navigate } from '../router';
@@ -133,6 +134,14 @@ export function IdeaPage({ slug }: { slug: string }) {
       {error && <p className="notice notice--error">{error}</p>}
 
       <header className="idea__header">
+        {idea.capsule_url && (
+          // Ratio 460 x 215, celui d'une capsule Steam : l'image est recadrée
+          // par `object-fit: cover` plutôt que déformée.
+          <div className="idea__capsule">
+            <img src={idea.capsule_url} alt={`Capsule de ${idea.title || 'l’idée'}`} />
+          </div>
+        )}
+
         <EditableText
           label="le titre"
           className="idea__title"
@@ -183,6 +192,17 @@ export function IdeaPage({ slug }: { slug: string }) {
               onSave={(competition) => save({ competition })}
             />
           </Field>
+
+          <Attachments
+            slug={idea.slug}
+            capsuleFileId={idea.capsule_file_id}
+            onCapsuleChange={(capsule_file_id) => save({ capsule_file_id })}
+            onCapsuleLost={() =>
+              setIdea((current) =>
+                current ? { ...current, capsule_file_id: null, capsule_url: null } : current,
+              )
+            }
+          />
 
           <VerdictSection verdicts={verdicts} onSubmit={addVerdict} />
         </main>

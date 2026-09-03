@@ -6,6 +6,8 @@ import Fastify from 'fastify';
 import { config } from './config.js';
 import { openDatabase } from './db.js';
 import { registerErrorHandling } from './errors.js';
+import attachmentRoutes from './routes/attachments.js';
+import fileRoutes from './routes/files.js';
 import ideaRoutes from './routes/ideas.js';
 import { validatorCompiler } from './validation.js';
 
@@ -26,6 +28,10 @@ export async function buildApp({ db, dbPath, logger = false } = {}) {
   registerErrorHandling(app);
 
   await app.register(ideaRoutes);
+  await app.register(attachmentRoutes);
+  // `/files/*` sert les fichiers utilisateur ; il est déclaré avant le repli
+  // SPA pour qu'un fichier absent renvoie un 404 JSON et non `index.html`.
+  await app.register(fileRoutes);
 
   await registerStatic(app);
 

@@ -4,6 +4,7 @@ import {
   getIdeaBySlugOrFail,
   listIdeas,
   listVerdicts,
+  restoreIdea,
   softDeleteIdea,
   updateIdea,
 } from '../ideas-repo.js';
@@ -16,8 +17,9 @@ import {
 } from '../schemas.js';
 
 /**
- * Routes JSON du lot 1. Aucune route ne sert `attachments` ni `capsule_file_id` :
- * les pièces jointes sont le lot 2, seul le schéma de base les anticipe.
+ * Routes JSON de l'idée et de ses verdicts. Les pièces jointes ont les leurs
+ * (`routes/attachments.js`) ; `PATCH /api/ideas/:slug` accepte `capsule_file_id`
+ * depuis le lot 2.
  */
 export default async function ideaRoutes(app) {
   const { db } = app;
@@ -44,6 +46,15 @@ export default async function ideaRoutes(app) {
 
   app.delete('/api/ideas/:slug', { schema: { params: ideaSlugParams } }, async (request) =>
     softDeleteIdea(db, request.params.slug),
+  );
+
+  /**
+   * Sort une idée de la corbeille. Sans interface au lot 2 — elle arrive au
+   * lot 3 — mais la route existe : une suppression redevient annulable sans
+   * ouvrir la base à la main.
+   */
+  app.post('/api/ideas/:slug/restore', { schema: { params: ideaSlugParams } }, async (request) =>
+    restoreIdea(db, request.params.slug),
   );
 
   app.get('/api/ideas/:slug/verdicts', { schema: { params: ideaSlugParams } }, async (request) => {

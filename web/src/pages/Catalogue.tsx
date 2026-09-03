@@ -182,9 +182,15 @@ function IdeaCard({ idea }: { idea: Idea }) {
 
   return (
     <Link to={`/idees/${idea.slug}`} className="card">
-      {/* Capsule : placeholder tant que les pièces jointes n'existent pas (lot 2). */}
+      {/* La capsule choisie parmi les images attachées, sinon l'initiale du titre. */}
       <div className="card__capsule" aria-hidden="true">
-        <span className="card__capsule-initial">{(idea.title || '?').trim().charAt(0).toUpperCase()}</span>
+        {idea.capsule_url ? (
+          <img className="card__capsule-image" src={idea.capsule_url} alt="" loading="lazy" />
+        ) : (
+          <span className="card__capsule-initial">
+            {(idea.title || '?').trim().charAt(0).toUpperCase()}
+          </span>
+        )}
       </div>
 
       <div className="card__body">

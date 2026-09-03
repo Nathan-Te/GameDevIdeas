@@ -39,7 +39,7 @@ test('les migrations sont idempotentes : un second passage ne rejoue rien', asyn
   assert.equal(db.prepare('SELECT count(*) AS n FROM schema_migrations').get().n, listMigrations().length);
 });
 
-test('le schéma anticipe le lot 2 sans qu’aucune route ne le serve', async (t) => {
+test('le schéma des pièces jointes est complet après 002', async (t) => {
   const db = new Database(':memory:');
   t.after(() => db.close());
   runMigrations(db);
@@ -49,6 +49,8 @@ test('le schéma anticipe le lot 2 sans qu’aucune route ne le serve', async (t
   assert.ok(ideaColumns.includes('deleted_at'), 'deleted_at présente pour le soft delete');
 
   const attachmentColumns = db.prepare('PRAGMA table_info(attachments)').all().map((c) => c.name);
+  // `size_bytes` est ajoutée par `002-attachment-size.sql` : elle arrive donc
+  // en fin de table, après `created_at`, et non à sa place « logique ».
   assert.deepEqual(attachmentColumns, [
     'id',
     'idea_id',
@@ -59,6 +61,7 @@ test('le schéma anticipe le lot 2 sans qu’aucune route ne le serve', async (t
     'link_type',
     'position',
     'created_at',
+    'size_bytes',
   ]);
 });
 
@@ -89,6 +92,7 @@ test('`npm run migrate` applique puis n’a plus rien à faire', async (t) => {
       timeout: 20000,
     });
 
-  assert.match(run(), /1 migration\(s\) appliquée\(s\)/);
+  // Le nombre suit la liste des migrations : ajouter un lot ne casse pas ce test.
+  assert.ok(run().includes(`${listMigrations().length} migration(s) appliquée(s)`));
   assert.match(run(), /base déjà à jour/);
 });

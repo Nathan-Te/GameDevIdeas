@@ -1,4 +1,6 @@
+import { assertUsableAsCapsule } from './attachments-repo.js';
 import { notFound } from './errors.js';
+import { fileUrl } from './files.js';
 import { isDerivedFrom, uniqueSlug } from './slug.js';
 
 export const DEFAULT_TITLE = 'Sans titre';
@@ -21,14 +23,23 @@ const CURRENT_VERDICT_JOIN = `
   )
 `;
 
+/**
+ * La capsule est jointe ici plutôt que résolue par une seconde requête : le
+ * catalogue affiche cinquante capsules d'un coup et ne doit pas faire cinquante
+ * allers-retours.
+ */
+const CAPSULE_JOIN = 'LEFT JOIN attachments c ON c.id = i.capsule_file_id';
+
 const SELECT_IDEA = `
   SELECT i.*,
          v.id         AS verdict_id,
          v.score      AS verdict_score,
          v.note       AS verdict_note,
-         v.created_at AS verdict_created_at
+         v.created_at AS verdict_created_at,
+         c.path       AS capsule_path
   FROM ideas i
   ${CURRENT_VERDICT_JOIN}
+  ${CAPSULE_JOIN}
 `;
 
 /** Sépare la ligne SQL plate en idée + verdict courant imbriqué. */
@@ -46,6 +57,8 @@ export function serializeIdea(row) {
     status: row.status,
     competition: row.competition,
     capsule_file_id: row.capsule_file_id,
+    /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
+    capsule_url: fileUrl(row.capsule_path),
     created_at: row.created_at,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at,
@@ -164,6 +177,14 @@ export function updateIdea(db, slug, patch = {}) {
     }
   }
 
+  if (Object.hasOwn(patch, 'capsule_file_id')) {
+    if (patch.capsule_file_id !== null) {
+      assertUsableAsCapsule(db, existing.id, patch.capsule_file_id);
+    }
+    sets.push('capsule_file_id = @capsule_file_id');
+    params.capsule_file_id = patch.capsule_file_id;
+  }
+
   const renamingTitle = Object.hasOwn(patch, 'title') && patch.title !== existing.title;
   const explicitSlug = Object.hasOwn(patch, 'slug');
 
@@ -184,12 +205,32 @@ export function updateIdea(db, slug, patch = {}) {
   return serializeIdea(db.prepare(`${SELECT_IDEA} WHERE i.id = ?`).get(existing.id));
 }
 
-/** Soft delete : l'idée part en corbeille (restauration et purge au lot 3). */
+/** Soft delete : l'idée part en corbeille. `restoreIdea` fait le chemin inverse. */
 export function softDeleteIdea(db, slug) {
   const existing = getIdeaBySlugOrFail(db, slug);
   const timestamp = now();
   db.prepare('UPDATE ideas SET deleted_at = ?, updated_at = ? WHERE id = ?')
     .run(timestamp, timestamp, existing.id);
+  return serializeIdea(db.prepare(`${SELECT_IDEA} WHERE i.id = ?`).get(existing.id));
+}
+
+/**
+ * Sort l'idée de la corbeille. 404 si elle n'y est pas : « restaurer une idée
+ * vivante » n'a pas de sens et signale presque toujours un mauvais slug.
+ *
+ * `updated_at` bouge, comme à la suppression : entrer en corbeille et en
+ * sortir sont deux modifications de la fiche, pas des verdicts.
+ */
+export function restoreIdea(db, slug) {
+  const existing = findIdeaBySlug(db, slug, { includeDeleted: true });
+
+  if (!existing || !existing.deleted_at) {
+    throw notFound(`Aucune idée supprimée avec le slug « ${slug} ».`);
+  }
+
+  db.prepare('UPDATE ideas SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+    .run(now(), existing.id);
+
   return serializeIdea(db.prepare(`${SELECT_IDEA} WHERE i.id = ?`).get(existing.id));
 }
 

@@ -7,6 +7,10 @@
  * qui entre ; ce qui sort est construit explicitement par `serializeIdea`.
  */
 
+import { LINK_TYPES } from './links.js';
+
+export { LINK_TYPES };
+
 /** Énumération suggérée par le seed. `family` reste libre côté base. */
 export const FAMILIES = [
   'friendslop',
@@ -64,7 +68,15 @@ export const patchIdeaBody = {
   type: 'object',
   additionalProperties: false,
   minProperties: 1,
-  properties: ideaFields,
+  properties: {
+    ...ideaFields,
+    /**
+     * Absent de `createIdeaBody` : une idée qui n'existe pas encore ne peut pas
+     * avoir de pièce jointe, donc pas de capsule. `null` retire la capsule ;
+     * sinon la pièce doit être une image de cette idée (vérifié dans le dépôt).
+     */
+    capsule_file_id: { type: ['integer', 'null'], minimum: 1 },
+  },
 };
 
 export const listIdeasQuery = {
@@ -77,6 +89,48 @@ export const listIdeasQuery = {
     sort: { type: 'string', enum: SORTS, default: 'updated' },
     /** La corbeille arrive au lot 3 ; le filtre existe déjà côté API. */
     deleted: { type: 'boolean', default: false },
+  },
+};
+
+/** Corps JSON d'un lien. Un fichier arrive en multipart, sans schéma JSON. */
+export const createLinkBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['url'],
+  properties: {
+    url: { type: 'string', minLength: 1, maxLength: 2000 },
+    label: text(300),
+  },
+};
+
+export const attachmentIdParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'integer', minimum: 1 } },
+};
+
+export const patchAttachmentBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    label: text(300),
+    /** Rang dans la liste, borné à la taille de la liste par le dépôt. */
+    position: { type: 'integer', minimum: 0, maximum: 10000 },
+    link_type: { type: 'string', enum: LINK_TYPES },
+  },
+};
+
+export const reorderAttachmentsBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ids'],
+  properties: {
+    ids: {
+      type: 'array',
+      items: { type: 'integer', minimum: 1 },
+      maxItems: 1000,
+    },
   },
 };
 

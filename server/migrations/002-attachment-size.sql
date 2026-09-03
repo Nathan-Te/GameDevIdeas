@@ -1,0 +1,12 @@
+-- 002-attachment-size.sql — taille des fichiers attachés (lot 2).
+--
+-- La carte « fichier » du front affiche le poids du fichier. On pourrait le
+-- lire sur le disque à chaque sérialisation, mais ce serait un `stat` par pièce
+-- jointe et par affichage du catalogue : la métadonnée a sa place en base, à
+-- côté du chemin. Rappel de la règle du projet : `001-init.sql` n'est pas
+-- réécrite, on ajoute une migration.
+--
+-- Reste NULL pour un lien (pas de fichier) et pour toute pièce jointe créée
+-- avant cette migration — il n'en existe aucune, le lot 1 ne servait pas la
+-- table.
+ALTER TABLE attachments ADD COLUMN size_bytes INTEGER;

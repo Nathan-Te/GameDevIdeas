@@ -22,9 +22,14 @@ export const STATUSES = [
   'publie',
 ] as const;
 
+/** Miroir de `LINK_TYPES` dans `server/src/links.js`. Pilote l'icône du lien. */
+export const LINK_TYPES = ['trello', 'asset-store', 'git', 'steam', 'video', 'autre'] as const;
+
 export type Family = (typeof FAMILIES)[number];
 export type Status = (typeof STATUSES)[number];
 export type Sort = 'updated' | 'created' | 'score' | 'title';
+export type LinkType = (typeof LINK_TYPES)[number];
+export type AttachmentKind = 'image' | 'markdown' | 'file' | 'link';
 
 /** Libellés lisibles : les valeurs stockées restent celles du seed. */
 export const FAMILY_LABELS: Record<Family, string> = {
@@ -57,6 +62,32 @@ export const SORT_LABELS: Record<Sort, string> = {
   title: 'Titre',
 };
 
+export const LINK_TYPE_LABELS: Record<LinkType, string> = {
+  trello: 'Trello',
+  'asset-store': 'Asset Store',
+  git: 'Dépôt Git',
+  steam: 'Steam',
+  video: 'Vidéo',
+  autre: 'Lien',
+};
+
+export interface Attachment {
+  id: number;
+  idea_id: number;
+  kind: AttachmentKind;
+  label: string;
+  /** Chemin relatif dans `data/files/`. Nul pour un lien. */
+  path: string | null;
+  /** Adresse cible d'un lien. Nulle pour un fichier. */
+  url: string | null;
+  link_type: LinkType | null;
+  position: number;
+  size_bytes: number | null;
+  created_at: string;
+  /** Adresse publique du fichier, servie par `/files/*`. Nulle pour un lien. */
+  file_url: string | null;
+}
+
 export interface Verdict {
   id: number;
   idea_id?: number;
@@ -76,8 +107,10 @@ export interface Idea {
   family: Family;
   status: Status;
   competition: string;
-  /** Renseigné au lot 2 (choix de la capsule parmi les images attachées). */
+  /** Image de capsule choisie parmi les pièces jointes de l'idée. */
   capsule_file_id: number | null;
+  /** Adresse de cette image, ou `null` tant qu'aucune capsule n'est choisie. */
+  capsule_url: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -88,9 +121,25 @@ export interface Idea {
 export type IdeaPatch = Partial<
   Pick<
     Idea,
-    'slug' | 'title' | 'tagline' | 'pitch' | 'gif' | 'price_cents' | 'family' | 'status' | 'competition'
+    | 'slug'
+    | 'title'
+    | 'tagline'
+    | 'pitch'
+    | 'gif'
+    | 'price_cents'
+    | 'family'
+    | 'status'
+    | 'competition'
+    | 'capsule_file_id'
   >
 >;
+
+/** Champs d'une pièce jointe qu'un PATCH peut écrire. */
+export interface AttachmentPatch {
+  label?: string;
+  position?: number;
+  link_type?: LinkType;
+}
 
 export interface IdeaFilters {
   family?: Family | '';

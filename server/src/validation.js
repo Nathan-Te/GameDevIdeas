@@ -28,3 +28,23 @@ const coercing = new Ajv({ ...shared, coerceTypes: true });
 export function validatorCompiler({ schema, httpPart }) {
   return (httpPart === 'body' ? strict : coercing).compile(schema);
 }
+
+/**
+ * Un validateur de corps utilisable hors du cycle Fastify.
+ *
+ * `POST /api/ideas/:slug/attachments` accepte deux formats — multipart pour un
+ * fichier, JSON pour un lien — sur la même route. Un schéma de corps déclaré à
+ * Fastify s'appliquerait aussi aux requêtes multipart, dont le corps n'est pas
+ * du JSON : la validation du lien est donc faite dans le handler, mais toujours
+ * par schéma, avec le même AJV et les mêmes règles.
+ */
+export function compileBody(schema) {
+  const validate = strict.compile(schema);
+
+  return (data) => {
+    if (validate(data)) return null;
+    return (validate.errors || [])
+      .map((issue) => `body${issue.instancePath || ''} ${issue.message}`)
+      .join(' ; ');
+  };
+}

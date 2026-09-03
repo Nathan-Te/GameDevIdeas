@@ -1,4 +1,4 @@
-import type { Idea, IdeaFilters, IdeaPatch, Verdict } from './types';
+import type { Attachment, AttachmentPatch, Idea, IdeaFilters, IdeaPatch, Verdict } from './types';
 
 /**
  * Petit client typé au-dessus de `fetch`. Pas de bibliothèque d'état global :
@@ -100,5 +100,113 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(verdict),
     });
+  },
+
+  async restoreIdea(slug: string): Promise<Idea> {
+    return request<Idea>(`/api/ideas/${encodeURIComponent(slug)}/restore`, { method: 'POST' });
+  },
+
+  // --- Pièces jointes -------------------------------------------------------
+
+  async listAttachments(slug: string): Promise<Attachment[]> {
+    const { attachments } = await request<{ attachments: Attachment[] }>(
+      `/api/ideas/${encodeURIComponent(slug)}/attachments`,
+    );
+    return attachments;
+  },
+
+  /** Ajoute un lien. Le serveur en déduit le type et, sans label, le titre. */
+  async addLink(slug: string, link: { url: string; label?: string }): Promise<Attachment> {
+    const { attachments } = await request<{ attachments: Attachment[] }>(
+      `/api/ideas/${encodeURIComponent(slug)}/attachments`,
+      { method: 'POST', body: JSON.stringify(link) },
+    );
+    return attachments[0];
+  },
+
+  /**
+   * Envoie un fichier. XHR et non `fetch` : la progression d'un envoi n'est pas
+   * observable avec `fetch` (`ReadableStream` en corps de requête n'est pas
+   * supporté partout, et sans lui il n'y a pas d'événement de progression).
+   * Un fichier par requête, pour que chaque barre avance pour son fichier.
+   */
+  uploadFile(
+    slug: string,
+    file: File,
+    onProgress?: (ratio: number) => void,
+    signal?: AbortSignal,
+  ): Promise<Attachment> {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file, file.name);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/ideas/${encodeURIComponent(slug)}/attachments`);
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      });
+
+      xhr.addEventListener('load', () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText) as unknown;
+        } catch {
+          body = null;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(1);
+          resolve((body as { attachments: Attachment[] }).attachments[0]);
+          return;
+        }
+
+        const { error, message } = (body ?? {}) as { error?: string; message?: string };
+        reject(new ApiError(xhr.status, error ?? 'error', message ?? `Erreur ${xhr.status}.`));
+      });
+
+      xhr.addEventListener('error', () =>
+        reject(new ApiError(0, 'network_error', 'Serveur injoignable.')),
+      );
+      xhr.addEventListener('abort', () =>
+        reject(new ApiError(0, 'aborted', 'Envoi interrompu.')),
+      );
+
+      signal?.addEventListener('abort', () => xhr.abort());
+      xhr.send(form);
+    });
+  },
+
+  updateAttachment(id: number, patch: AttachmentPatch): Promise<Attachment> {
+    return request<Attachment>(`/api/attachments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  },
+
+  deleteAttachment(id: number): Promise<Attachment> {
+    return request<Attachment>(`/api/attachments/${id}`, { method: 'DELETE' });
+  },
+
+  async reorderAttachments(slug: string, ids: number[]): Promise<Attachment[]> {
+    const { attachments } = await request<{ attachments: Attachment[] }>(
+      `/api/ideas/${encodeURIComponent(slug)}/attachments/order`,
+      { method: 'PUT', body: JSON.stringify({ ids }) },
+    );
+    return attachments;
+  },
+
+  /** Contenu texte d'un markdown attaché, lu depuis `/files/`. */
+  async fetchText(url: string): Promise<string> {
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch {
+      throw new ApiError(0, 'network_error', 'Fichier injoignable.');
+    }
+    if (!response.ok) {
+      throw new ApiError(response.status, 'not_found', 'Fichier introuvable.');
+    }
+    return response.text();
   },
 };

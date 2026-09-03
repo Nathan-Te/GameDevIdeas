@@ -15,6 +15,8 @@ Reprises telles quelles de la section 8 du seed :
 - Un lot livré est un lot commité, sur `main`, avec un README de lot dans `Docs/lots/`.
 - La base n'est jamais modifiée sans migration numérotée ; aucune migration livrée n'est réécrite après coup.
 - Les fichiers utilisateur ne vont jamais en base.
+- Un fichier supprimé en base est supprimé sur disque dans la même opération ; jamais l'inverse.
+- Tout HTML issu d'un contenu utilisateur (markdown, labels) passe par DOMPurify avant insertion.
 - L'API renvoie toujours du JSON, erreurs comprises (`{ error, message }`).
 - Pas de dépendance ajoutée sans la justifier dans le README du lot.
 
@@ -32,6 +34,43 @@ docker compose up --build    # l'application complète sur http://localhost:3000
 En développement, on travaille sur `http://localhost:5173` : Vite sert le front et proxifie `/api` vers Fastify. En production, Fastify sert `web/dist` en statique avec repli SPA.
 
 Node 20 ou plus est requis (`node:test`, Fastify 5, Vite 6) ; le développement se fait sur Node 24 LTS, la même version que le conteneur.
+
+## Variables d'environnement
+
+Toutes facultatives ; `.env.example` les documente une par une avec leur valeur par défaut.
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `PORT`, `HOST` | `3000`, `0.0.0.0` | Écoute HTTP. |
+| `DATA_DB_DIR` | `./data/db` | Dossier du fichier SQLite. |
+| `DB_PATH` | — | Chemin complet de la base, prioritaire sur `DATA_DB_DIR`. `:memory:` pour les tests. |
+| `DATA_FILES_DIR` | `./data/files` | Dossier des fichiers utilisateur, servi par `/files/*`. |
+| `MAX_UPLOAD_MB` | `50` | Taille maximale d'un fichier envoyé. Au-delà : 413, et rien n'est écrit. |
+| `LINK_TITLE_LOOKUP` | activé | Aller chercher le titre de la page pour libeller un lien collé sans label. Coupé, le libellé retombe sur le nom de domaine. |
+| `SERVE_STATIC`, `WEB_DIST` | `web/dist` s'il existe | Front statique avec repli SPA. |
+| `LOG_LEVEL` | `info` | Journalisation Fastify. |
+| `NTFY_TOPIC`, `NTFY_SERVER` | `pg-nathan-7k2x`, `ntfy.sh` | Hooks Claude Code, pas l'application. |
+
+## Carte des routes
+
+| Route | Rôle |
+|---|---|
+| `GET /api/ideas` | Catalogue, filtres `family` / `status` / `minScore` / `deleted`, tri `sort`. |
+| `POST /api/ideas` | Création. |
+| `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id`), corbeille. |
+| `POST /api/ideas/:slug/restore` | Sort l'idée de la corbeille. 404 si elle n'y est pas. |
+| `GET`, `POST /api/ideas/:slug/verdicts` | Historique et ajout d'un verdict. |
+| `GET`, `POST /api/ideas/:slug/attachments` | Liste ; ajout par multipart (fichiers) ou JSON `{ url, label? }` (lien). |
+| `PUT /api/ideas/:slug/attachments/order` | Réordonne, `{ ids: [...] }` complet, en une transaction. |
+| `PATCH`, `DELETE /api/attachments/:id` | `label` / `position` / `link_type` ; suppression ligne + fichier. |
+| `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. |
+| Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
+
+## Plan en lots
+
+- **Lot 1 — Socle** : livré. Dépôt, Docker, schéma, API idées et verdicts, catalogue et page idée.
+- **Lot 2 — Pièces jointes** : livré. Upload, liens typés, markdown rendu, capsule, galerie, `restore`.
+- **Lot 3 — Vitrine** : à venir. **La corbeille en premier** (l'interface manque encore à `restore`), puis vue Steam, passe de DA et responsive.
 
 ## Convention des migrations
 
@@ -56,7 +95,8 @@ Chaque lot livré a son fichier dans `Docs/lots/`, nommé `lot-NN-nom.md` (`lot-
 ```
 server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
-  src/            config, db, migrate, routes, validation, dépôt SQL
+  src/            config, db, migrate, routes, validation, dépôts SQL,
+                  files.js (disque et garde de chemin), links.js (liens typés)
   test/           node:test, une base en mémoire par test
 web/              Front React + Vite + TypeScript
   src/            api (client typé), router, pages, composants, styles.css
@@ -71,7 +111,8 @@ data/             base SQLite et fichiers utilisateur — jamais commité
 - SQL en clair dans `server/src/ideas-repo.js` ; les routes ne contiennent pas de requête.
 - Les erreurs passent par `HttpError` (`server/src/errors.js`) et ressortent en `{ error, message }`.
 - Les entrées sont validées par schéma JSON Fastify (`server/src/schemas.js`). Pas de schéma de réponse : la sérialisation est explicite.
-- Front sans bibliothèque d'état global ni de routage : `fetch` + un client typé (`web/src/api.ts`), un routeur maison (`web/src/router.tsx`).
+- Front sans bibliothèque d'état global ni de routage : `fetch` + un client typé (`web/src/api.ts`), un routeur maison (`web/src/router.tsx`). L'envoi de fichiers passe par XHR, seul moyen d'obtenir une progression d'upload.
+- Les fichiers utilisateur ne sont jamais atteints par un chemin construit à la main : tout passe par `resolveInsideFiles` (`server/src/files.js`), qui renvoie `null` dès que la résolution sort de `data/files/`.
 - Direction artistique : sombre, sobre, un seul accent chaud (`--accent`), pas d'animation gratuite, lisible sur mobile.
 - Commentaires et interface en français.
 

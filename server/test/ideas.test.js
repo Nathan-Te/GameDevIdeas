@@ -142,12 +142,49 @@ test('DELETE /api/ideas/:slug fait un soft delete et retire l’idée du catalog
   assert.equal((await get(app, `/api/ideas/${created.slug}`)).status, 404);
   assert.equal((await get(app, '/api/ideas')).body.ideas.length, 0);
 
-  // La ligne est toujours là : la corbeille du lot 3 pourra la restaurer.
+  // La ligne est toujours là : `POST .../restore` la ramène.
   const row = db.prepare('SELECT id, deleted_at FROM ideas WHERE id = ?').get(created.id);
   assert.ok(row, 'la ligne survit en base');
   assert.ok(row.deleted_at);
 
   assert.equal((await del(app, `/api/ideas/${created.slug}`)).status, 404);
+});
+
+test('POST /api/ideas/:slug/restore ramène une idée de la corbeille', async (t) => {
+  const { app } = await makeApp(t);
+  const created = await seedIdea(app, { title: 'Idée regrettée', family: 'tactique' });
+
+  await del(app, `/api/ideas/${created.slug}`);
+  assert.equal((await get(app, `/api/ideas/${created.slug}`)).status, 404);
+
+  const restored = await post(app, `/api/ideas/${created.slug}/restore`, undefined);
+
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.id, created.id);
+  assert.equal(restored.body.deleted_at, null);
+  // Rien d'autre n'a bougé : la corbeille n'est pas une remise à zéro.
+  assert.equal(restored.body.title, 'Idée regrettée');
+  assert.equal(restored.body.family, 'tactique');
+
+  assert.equal((await get(app, `/api/ideas/${created.slug}`)).status, 200);
+  assert.equal((await get(app, '/api/ideas')).body.ideas.length, 1);
+});
+
+test('restaurer une idée vivante ou inconnue renvoie 404 JSON', async (t) => {
+  const { app } = await makeApp(t);
+  const created = await seedIdea(app, { title: 'Bien vivante' });
+
+  const alive = await post(app, `/api/ideas/${created.slug}/restore`, undefined);
+  assert.equal(alive.status, 404);
+  assert.equal(alive.body.error, 'not_found');
+
+  const unknown = await post(app, '/api/ideas/nexiste-pas/restore', undefined);
+  assert.equal(unknown.status, 404);
+
+  // Restaurer deux fois de suite : la seconde n'a plus rien à restaurer.
+  await del(app, `/api/ideas/${created.slug}`);
+  assert.equal((await post(app, `/api/ideas/${created.slug}/restore`, undefined)).status, 200);
+  assert.equal((await post(app, `/api/ideas/${created.slug}/restore`, undefined)).status, 404);
 });
 
 test('GET /api/ideas filtre par famille, statut et score minimum', async (t) => {
