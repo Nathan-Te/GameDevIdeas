@@ -7,6 +7,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // `shared/store-model.js` vit à la racine du dépôt, hors de `web/` : le
+    // serveur de développement doit avoir le droit de le lire. Le défaut de
+    // Vite couvre déjà la racine des workspaces npm, mais l'écrire évite de
+    // dépendre d'une détection.
+    fs: { allow: ['..'] },
     // En développement le front est servi par Vite et l'API par Fastify sur 3000.
     // Le proxy garde une origine unique, donc les mêmes URL qu'en production.
     //

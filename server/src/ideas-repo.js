@@ -58,6 +58,12 @@ export function serializeIdea(row) {
     status: row.status,
     competition: row.competition,
     capsule_file_id: row.capsule_file_id,
+    /**
+     * Date de mise en liste de souhaits, `null` sinon. Servie partout où une
+     * idée est servie : le catalogue marque ses cartes, la vue store dessine
+     * son bouton, et aucun des deux n'a besoin d'un second appel.
+     */
+    wishlisted_at: row.wishlisted_at ?? null,
     /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
     capsule_url: fileUrl(row.capsule_path),
     /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
@@ -76,7 +82,10 @@ export function serializeIdea(row) {
   };
 }
 
-export function listIdeas(db, { family, status, minScore, sort = 'updated', deleted = false } = {}) {
+export function listIdeas(
+  db,
+  { family, status, minScore, wishlisted, sort = 'updated', deleted = false } = {},
+) {
   const where = [deleted ? 'i.deleted_at IS NOT NULL' : 'i.deleted_at IS NULL'];
   const params = {};
 
@@ -93,6 +102,13 @@ export function listIdeas(db, { family, status, minScore, sort = 'updated', dele
     // « au moins 3 » ne peut pas être vrai d'une idée sans verdict.
     where.push('v.score >= @minScore');
     params.minScore = minScore;
+  }
+  if (wishlisted !== undefined) {
+    // Filtre à trois états : absent = tout, `true` = la liste de souhaits,
+    // `false` = ce qui n'y est pas. Le catalogue n'utilise que les deux
+    // premiers, mais un filtre booléen qui ne sait pas dire « non » est un
+    // piège qu'on se tend à soi-même.
+    where.push(wishlisted ? 'i.wishlisted_at IS NOT NULL' : 'i.wishlisted_at IS NULL');
   }
 
   const order = {
@@ -180,6 +196,17 @@ export function updateIdea(db, slug, patch = {}) {
     }
   }
 
+  /**
+   * `wishlisted` est un booléen à l'entrée, une date en base. Rebasculer une
+   * idée déjà en liste réécrit la date : c'est un geste, pas un état à
+   * préserver, et sa date la plus récente est la seule qui raconte quelque
+   * chose.
+   */
+  if (Object.hasOwn(patch, 'wishlisted')) {
+    sets.push('wishlisted_at = @wishlisted_at');
+    params.wishlisted_at = patch.wishlisted ? now() : null;
+  }
+
   if (Object.hasOwn(patch, 'capsule_file_id')) {
     if (patch.capsule_file_id !== null) {
       assertUsableAsCapsule(db, existing.id, patch.capsule_file_id);
@@ -200,8 +227,16 @@ export function updateIdea(db, slug, patch = {}) {
   }
 
   if (sets.length) {
-    params.updated_at = now();
-    sets.push('updated_at = @updated_at');
+    /**
+     * Mettre une idée en liste de souhaits n'est pas modifier sa fiche : le
+     * catalogue trié par mise à jour ne doit pas se réordonner sous la souris
+     * parce qu'on a cliqué un bouton dans la vue store. Un patch qui ne porte
+     * que `wishlisted` laisse donc `updated_at` tranquille.
+     */
+    if (sets.some((set) => !set.startsWith('wishlisted_at'))) {
+      params.updated_at = now();
+      sets.push('updated_at = @updated_at');
+    }
     db.prepare(`UPDATE ideas SET ${sets.join(', ')} WHERE id = @id`).run(params);
   }
 

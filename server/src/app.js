@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { openDatabase } from './db.js';
 import { registerErrorHandling } from './errors.js';
 import attachmentRoutes from './routes/attachments.js';
+import configRoutes from './routes/config.js';
 import fileRoutes from './routes/files.js';
 import ideaRoutes from './routes/ideas.js';
 import { validatorCompiler } from './validation.js';
@@ -27,6 +28,7 @@ export async function buildApp({ db, dbPath, logger = false } = {}) {
   app.decorate('db', database);
   registerErrorHandling(app);
 
+  await app.register(configRoutes);
   await app.register(ideaRoutes);
   await app.register(attachmentRoutes);
   // `/files/*` sert les fichiers utilisateur ; il est déclaré avant le repli

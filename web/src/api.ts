@@ -66,6 +66,7 @@ function query(filters: IdeaFilters): string {
   if (filters.minScore !== '' && filters.minScore !== undefined) {
     params.set('minScore', String(filters.minScore));
   }
+  if (filters.wishlisted) params.set('wishlisted', 'true');
   if (filters.sort) params.set('sort', filters.sort);
   if (filters.deleted) params.set('deleted', 'true');
   const qs = params.toString();
@@ -91,6 +92,23 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(patch),
     });
+  },
+
+  /**
+   * Le seul geste actif de la vue store. Un `PATCH` comme un autre côté API :
+   * il a sa méthode ici parce que c'est le seul appel qu'une page en lecture
+   * seule s'autorise, et que ça mérite d'être lisible à l'appel.
+   */
+  setWishlisted(slug: string, wishlisted: boolean): Promise<Idea> {
+    return request<Idea>(`/api/ideas/${encodeURIComponent(slug)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ wishlisted }),
+    });
+  },
+
+  /** Configuration du serveur : le nom affiché comme développeur et éditeur. */
+  getConfig(): Promise<{ developer_name: string }> {
+    return request<{ developer_name: string }>('/api/config');
   },
 
   deleteIdea(slug: string): Promise<Idea> {

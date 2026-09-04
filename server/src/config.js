@@ -39,6 +39,13 @@ export const config = {
    */
   linkTitleLookup: bool(env.LINK_TITLE_LOOKUP, true),
 
+  /**
+   * Le nom affiché comme développeur et éditeur sur la vue store. C'est la
+   * seule donnée de la page qui ne vient pas de l'idée : elle est la même pour
+   * toutes, donc elle est de la configuration, pas un champ de fiche.
+   */
+  developerName: env.DEVELOPER_NAME || 'Nathan',
+
   migrationsDir: resolve(repoRoot, 'server', 'migrations'),
   webDist: fromRoot(env.WEB_DIST || './web/dist'),
 

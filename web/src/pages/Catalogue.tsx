@@ -13,6 +13,11 @@ import { Link, navigate } from '../router';
 import { FAMILIES, FAMILY_LABELS, SORT_LABELS, STATUS_LABELS, STATUSES } from '../types';
 import type { Family, Idea, IdeaFilters, Sort, Status } from '../types';
 
+/** Les filtres remis à zéro. Le tri survit : ce n'est pas un filtre. */
+function clearedFilters(sort: Sort | undefined): IdeaFilters {
+  return { family: '', status: '', minScore: '', wishlisted: undefined, sort };
+}
+
 export function Catalogue() {
   const [filters, setFilters] = useState<IdeaFilters>(() =>
     filtersFromSearch(window.location.search),
@@ -168,11 +173,22 @@ export function Catalogue() {
           </select>
         </label>
 
+        {/* La liste de souhaits est un filtre à part : c'est le seul qui vienne
+            d'un geste posé dans la vue store, pas d'un champ de la fiche. */}
+        <label className="filters__toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(filters.wishlisted)}
+            onChange={(event) => update({ wishlisted: event.target.checked || undefined })}
+          />
+          <span>Liste de souhaits</span>
+        </label>
+
         {active && (
           <button
             type="button"
             className="button button--ghost"
-            onClick={() => setFilters({ family: '', status: '', minScore: '', sort: filters.sort })}
+            onClick={() => setFilters(clearedFilters(filters.sort))}
           >
             Effacer les filtres
           </button>
@@ -193,7 +209,7 @@ export function Catalogue() {
                 type="button"
                 className="button button--ghost"
                 onClick={() =>
-                  setFilters({ family: '', status: '', minScore: '', sort: filters.sort })
+                  setFilters(clearedFilters(filters.sort))
                 }
               >
                 Effacer les filtres
@@ -243,6 +259,12 @@ function IdeaCard({ idea, search }: { idea: Idea; search: string }) {
   return (
     <article className="card">
       <div className="card__capsule">
+        {idea.wishlisted_at && (
+          <span className="card__wish" title="Sur la liste de souhaits">
+            <span aria-hidden="true">✔</span> Souhaitée
+          </span>
+        )}
+
         {idea.capsule_url ? (
           <img className="card__capsule-image" src={idea.capsule_url} alt="" loading="lazy" />
         ) : (

@@ -76,6 +76,12 @@ export const patchIdeaBody = {
      * sinon la pièce doit être une image de cette idée (vérifié dans le dépôt).
      */
     capsule_file_id: { type: ['integer', 'null'], minimum: 1 },
+    /**
+     * Absent de `createIdeaBody` aussi : on ne met pas en liste de souhaits une
+     * idée qu'on vient d'écrire, on l'y met après l'avoir regardée. Booléen à
+     * l'entrée, date en base (`wishlisted_at`).
+     */
+    wishlisted: { type: 'boolean' },
   },
 };
 
@@ -86,6 +92,8 @@ export const listIdeasQuery = {
     family: { type: 'string', enum: FAMILIES },
     status: { type: 'string', enum: STATUSES },
     minScore: { type: 'integer', minimum: 0, maximum: 5 },
+    /** Absent = tout ; `true` = la liste de souhaits ; `false` = le reste. */
+    wishlisted: { type: 'boolean' },
     sort: { type: 'string', enum: SORTS, default: 'updated' },
     /** La corbeille arrive au lot 3 ; le filtre existe déjà côté API. */
     deleted: { type: 'boolean', default: false },

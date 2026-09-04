@@ -51,6 +51,7 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `DATA_FILES_DIR` | `./data/files` | Dossier des fichiers utilisateur, servi par `/files/*`. |
 | `MAX_UPLOAD_MB` | `50` | Taille maximale d'un fichier envoyé. Au-delà : 413, et rien n'est écrit. |
 | `LINK_TITLE_LOOKUP` | activé | Aller chercher le titre de la page pour libeller un lien collé sans label. Coupé, le libellé retombe sur le nom de domaine. |
+| `DEVELOPER_NAME` | `Nathan` | Nom affiché comme développeur et éditeur sur la vue store, servi par `GET /api/config`. |
 | `SERVE_STATIC`, `WEB_DIST` | `web/dist` s'il existe | Front statique avec repli SPA. |
 | `LOG_LEVEL` | `info` | Journalisation Fastify. |
 | `NTFY_TOPIC`, `NTFY_SERVER` | `pg-nathan-7k2x`, `ntfy.sh` | Hooks Claude Code, pas l'application. |
@@ -59,9 +60,10 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 
 | Route | Rôle |
 |---|---|
-| `GET /api/ideas` | Catalogue, filtres `family` / `status` / `minScore` / `deleted`, tri `sort`. |
+| `GET /api/config` | Configuration lisible par le front. Une seule valeur : `developer_name`. |
+| `GET /api/ideas` | Catalogue, filtres `family` / `status` / `minScore` / `wishlisted` / `deleted`, tri `sort`. |
 | `POST /api/ideas` | Création. |
-| `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id`), corbeille. |
+| `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id` et `wishlisted`), corbeille. |
 | `POST /api/ideas/:slug/restore` | Sort l'idée de la corbeille. 404 si elle n'y est pas. |
 | `DELETE /api/ideas/:slug/purge` | Suppression définitive. N'accepte qu'une idée en corbeille (404 sinon) : verdicts, pièces jointes et idée dans une transaction, puis `data/files/{idea_id}/` en entier. |
 | `GET`, `POST /api/ideas/:slug/verdicts` | Historique et ajout d'un verdict. |
@@ -71,13 +73,16 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. |
 | Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
 
-Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam` (vue « page store », en lecture seule, filtres du catalogue transmis par la query pour enchaîner les idées) et `/corbeille`.
+Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam` et `/corbeille`.
+
+`/idees/:slug/steam` est une réplique fidèle du store de bureau, sans logo ni marque ; seul le bouton de liste de souhaits est actif. Le reste — enchaîner les idées en respectant les filtres, revenir à l'édition — vit dans une fine barre de service au-dessus de la maquette, hors du photomontage. Elle n'a pas de version mobile : elle s'éloigne (`zoom`) et se fait défiler.
 
 ## Plan en lots
 
 - **Lot 1 — Socle** : livré. Dépôt, Docker, schéma, API idées et verdicts, catalogue et page idée.
 - **Lot 2 — Pièces jointes** : livré. Upload, liens typés, markdown rendu, capsule, galerie, `restore`.
-- **Lot 3 — Vitrine** : livré. Corbeille et purge, vue Steam, feuille de tokens, passe de DA et responsive. **La v1 est close.**
+- **Lot 3 — Vitrine** : livré. Corbeille et purge, vue Steam, feuille de tokens, passe de DA et responsive.
+- **Lot 3b — La vraie vitrine** : livré. Vue store refaite en réplique fidèle, liste de souhaits (migration `003`, `ideas.wishlisted_at`), filtre et marqueur au catalogue, `DEVELOPER_NAME`. **La v1 est close.**
 
 ## Convention des migrations
 
@@ -100,6 +105,8 @@ Chaque lot livré a son fichier dans `Docs/lots/`, nommé `lot-NN-nom.md` (`lot-
 ## Structure
 
 ```
+shared/           store-model.js — la traduction « idée » → « fiche de magasin »
+                  (JS pur, importé par le front et testé par node:test)
 server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
   src/            config, db, migrate, routes, validation, dépôts SQL,
@@ -107,7 +114,8 @@ server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   test/           node:test, une base en mémoire par test
 web/              Front React + Vite + TypeScript
   src/            api (client typé), router, filters (filtres d'URL partagés),
-                  pages, composants, tokens.css puis styles.css
+                  pages, composants, tokens.css puis styles.css,
+                  steam.css (la palette du photomontage, hors tokens)
 Docs/             seed-vitrine.md (source de vérité) et lots/
 scripts/          ntfy-notify.mjs (hooks Claude Code)
 data/             base SQLite et fichiers utilisateur — jamais commité
@@ -123,6 +131,7 @@ data/             base SQLite et fichiers utilisateur — jamais commité
 - Les fichiers utilisateur ne sont jamais atteints par un chemin construit à la main : tout passe par `resolveInsideFiles` (`server/src/files.js`), qui renvoie `null` dès que la résolution sort de `data/files/`.
 - Direction artistique : sombre, sobre, un seul accent chaud (`--accent`), pas d'animation gratuite, lisible sur mobile.
 - **Toute la direction artistique tient dans `web/src/tokens.css`** : couleurs, espacements, rayons, typographie, formats et durées. `styles.css` l'importe en première ligne et ne contient plus une seule couleur littérale — une valeur en dur y est soit une géométrie, soit un oubli.
+- **`web/src/steam.css` est la seule exception, et elle est assumée** : le photomontage du store n'est pas de la DA Vitrine mais l'imitation d'une autre, et ses couleurs vivent sous `.sp-mock` sans jamais en sortir. Aucun token n'y entre, aucune de ses valeurs n'en sort.
 - Commentaires et interface en français.
 
 ## Hooks

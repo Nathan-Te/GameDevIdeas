@@ -113,6 +113,11 @@ export interface Idea {
   capsule_url: string | null;
   /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
   attachment_count: number;
+  /**
+   * Date de mise en liste de souhaits, `null` si l'idée n'y est pas. C'est le
+   * seul état qu'un clic dans la vue store peut changer.
+   */
+  wishlisted_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -134,7 +139,10 @@ export type IdeaPatch = Partial<
     | 'competition'
     | 'capsule_file_id'
   >
->;
+> & {
+  /** Booléen à l'entrée, `wishlisted_at` en sortie. */
+  wishlisted?: boolean;
+};
 
 /** Champs d'une pièce jointe qu'un PATCH peut écrire. */
 export interface AttachmentPatch {
@@ -148,6 +156,8 @@ export interface IdeaFilters {
   status?: Status | '';
   minScore?: number | '';
   sort?: Sort;
+  /** `true` : seulement la liste de souhaits. Absent : tout le catalogue. */
+  wishlisted?: boolean;
   /** `true` : la corbeille au lieu du catalogue. */
   deleted?: boolean;
 }

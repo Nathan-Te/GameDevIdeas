@@ -1,0 +1,1022 @@
+/*
+ * steam.css — la feuille du photomontage.
+ *
+ * Volontairement hors de `tokens.css`, et c'est la seule exception du projet :
+ * ce ne sont pas les couleurs de Vitrine. Cette page imite un magasin de jeux
+ * de bureau, et une palette qui suivrait l'accent chaud de Vitrine ruinerait le
+ * seul service que la page rende — déclencher le réflexe « wishlist ou pas ».
+ * Les valeurs vivent donc ici, sous `.sp-mock`, et ne fuient nulle part.
+ *
+ * Aucune marque : pas de logo, pas de nom d'éditeur, pas de wordmark emprunté.
+ * La barre du haut porte « Vitrine ». Ce sont la mise en page, les proportions
+ * et la hiérarchie typographique qui font la ressemblance, pas un logo.
+ *
+ * Géométrie de référence, reprise telle quelle d'une page de magasin de
+ * bureau : contenu sur 940 px, en-tête en deux colonnes 616 + 324, corps en
+ * 616 + 308 avec 16 px de gouttière, visionneuse 600 × 337, capsule au format
+ * 460 × 215.
+ */
+
+/* --- La barre de service, hors maquette ---------------------------------- */
+
+/* Elle n'appartient pas au photomontage : elle est au-dessus, dans les
+   couleurs de Vitrine, et c'est elle qui porte tout ce qui n'est pas du
+   magasin — navigation entre les idées et retour à l'édition. */
+.sp-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font);
+  font-size: var(--text-md);
+}
+
+.sp-toolbar__spacer {
+  flex: 1;
+}
+
+.sp-toolbar__link {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.sp-toolbar__link:hover {
+  background: var(--hover-veil);
+  color: var(--text);
+}
+
+.sp-toolbar__link.is-disabled {
+  color: var(--faint-2);
+  pointer-events: none;
+}
+
+.sp-toolbar__count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-toolbar__notice {
+  color: var(--danger-text);
+}
+
+/* --- Le photomontage ------------------------------------------------------ */
+
+.sp-frame {
+  /* La maquette a une largeur fixe : sur un écran plus étroit, on la fait
+     défiler plutôt que de la casser. Un magasin de bureau réduit à une colonne
+     ne ressemble plus à un magasin de bureau. */
+  overflow-x: auto;
+  background: #1b2838;
+}
+
+.sp-mock {
+  --sp-nav: #171a21;
+  --sp-nav-2: #1b2838;
+  --sp-page: #1b2838;
+  --sp-page-2: #2a475e;
+  --sp-blue: #67c1f5;
+  --sp-blue-dim: #66c0f4;
+  --sp-text: #c6d4df;
+  --sp-text-2: #c7d5e0;
+  --sp-dim: #8f98a0;
+  --sp-label: #556772;
+  --sp-value: #8ba6b6;
+  --sp-veil: rgba(0, 0, 0, 0.2);
+  --sp-veil-2: rgba(0, 0, 0, 0.4);
+  --sp-blue-veil: rgba(103, 193, 245, 0.2);
+  --sp-mixed: #b9a074;
+  --sp-negative: #a34c25;
+
+  /* La maquette occupe toute la largeur disponible, jamais moins de 940 :
+     les barres du haut et le bandeau d'en-tête sont pleine page comme sur un
+     vrai magasin, et seul le contenu est ramené à 940. */
+  width: 100%;
+  min-width: 940px;
+  padding-bottom: 64px;
+  /* La police du magasin n'est pas librement redistribuable. Si Nathan l'a
+     installée elle s'applique ; sinon Arial donne le même gabarit, ce qui est
+     tout ce qu'on lui demande. */
+  font-family: 'Motiva Sans', Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sp-text);
+  background: var(--sp-page);
+  text-align: left;
+}
+
+.sp-mock a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Tout ce qui est inerte l'est visiblement au clavier comme à la souris :
+   la page est une lecture, pas une interface. */
+.sp-mock .sp-inert {
+  cursor: default;
+  user-select: none;
+}
+
+.sp-width {
+  width: 940px;
+  margin: 0 auto;
+}
+
+/* --- Barre de navigation globale ------------------------------------------ */
+
+.sp-globalnav {
+  background: var(--sp-nav);
+  height: 66px;
+  display: flex;
+  align-items: center;
+}
+
+.sp-globalnav__inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+/* Un mot posé, pas un logo. C'est le point où la page dit ce qu'elle est. */
+.sp-wordmark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #dfe3e6;
+}
+
+.sp-menu {
+  display: flex;
+  gap: 22px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #b8b6b4;
+}
+
+.sp-globalnav__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #b8b6b4;
+}
+
+.sp-pillbtn {
+  padding: 2px 10px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #b8b6b4;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* --- Sous-barre du magasin ------------------------------------------------ */
+
+.sp-storenav {
+  height: 35px;
+  background: linear-gradient(to bottom, #1b2838 0%, #16202d 100%);
+  border-bottom: 1px solid #000;
+  display: flex;
+  align-items: center;
+}
+
+.sp-storenav__inner {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  gap: 18px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #b0bec9;
+}
+
+.sp-search {
+  margin-left: auto;
+  width: 200px;
+  height: 22px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #000;
+  color: #626366;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
+/* --- Fil d'Ariane et barre du jeu ----------------------------------------- */
+
+.sp-breadcrumbs {
+  padding: 12px 0 8px;
+  font-size: 12px;
+  color: var(--sp-dim);
+}
+
+.sp-breadcrumbs span + span::before {
+  content: '›';
+  margin: 0 6px;
+  color: #4c6272;
+}
+
+.sp-breadcrumbs .sp-crumb--link {
+  color: var(--sp-blue);
+}
+
+.sp-apphub {
+  background: var(--sp-veil-2);
+}
+
+.sp-apphub__inner {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px;
+}
+
+.sp-apphub__name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 400;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-apphub__tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--sp-blue);
+  flex-shrink: 0;
+}
+
+/* --- En-tête : visionneuse + colonne d'un coup d'œil ---------------------- */
+
+/* Le bandeau d'en-tête est pleine page, son contenu reste sur 940. */
+.sp-glancewrap {
+  background: linear-gradient(180deg, var(--sp-page) 0%, var(--sp-page-2) 100%);
+  padding: 16px 0 24px;
+  margin-bottom: 16px;
+}
+
+.sp-glance {
+  display: grid;
+  grid-template-columns: 616px 324px;
+}
+
+.sp-glance__left {
+  width: 616px;
+  padding: 0 8px;
+}
+
+.sp-glance__right {
+  width: 324px;
+  padding-left: 16px;
+}
+
+/* Visionneuse -------------------------------------------------------------- */
+
+.sp-stage {
+  position: relative;
+  width: 600px;
+  height: 337px;
+  background: #000;
+  overflow: hidden;
+}
+
+.sp-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.sp-stage__shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: #000;
+  cursor: zoom-in;
+}
+
+/* La « bande-annonce » : elle n'existe pas, elle est décrite. La carte le dit
+   sans le crier — un bouton de lecture, et le texte du champ `gif` dessous. */
+.sp-trailer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 64px;
+  text-align: center;
+  background: radial-gradient(120% 90% at 50% 40%, #2a3f54 0%, #11171f 100%);
+}
+
+.sp-trailer__play {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sp-trailer__play::after {
+  content: '';
+  margin-left: 5px;
+  border-style: solid;
+  border-width: 12px 0 12px 20px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.85);
+}
+
+.sp-trailer__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #dfe6ec;
+  max-height: 88px;
+  overflow: hidden;
+}
+
+.sp-trailer__text.is-empty {
+  color: #6d7c88;
+  font-style: italic;
+}
+
+.sp-trailer__tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #7d94a8;
+}
+
+/* Bandeau de vignettes ------------------------------------------------------ */
+
+/* Cinq vignettes de 116 px et leurs gouttières tiennent tout juste dans les
+   600 px de la visionneuse : les flèches se posent donc par-dessus les bords,
+   comme sur le magasin, plutôt que de manger la largeur. */
+.sp-strip {
+  position: relative;
+  width: 600px;
+  margin-top: 4px;
+}
+
+.sp-strip__arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 22px;
+  border: 0;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #66c0f4;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sp-strip__arrow--prev {
+  left: 0;
+}
+
+.sp-strip__arrow--next {
+  right: 0;
+}
+
+.sp-strip__arrow:disabled {
+  color: #3d5163;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.sp-strip__window {
+  overflow: hidden;
+  width: 600px;
+}
+
+.sp-strip__rail {
+  display: flex;
+  gap: 4px;
+  transition: transform 0.2s ease;
+}
+
+.sp-thumb {
+  width: 116px;
+  height: 65px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+  opacity: 0.55;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-thumb:hover {
+  opacity: 0.85;
+}
+
+.sp-thumb.is-active {
+  opacity: 1;
+  outline: 2px solid #67c1f5;
+  outline-offset: -2px;
+}
+
+.sp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sp-thumb__trailer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #2a3f54, #11171f);
+}
+
+.sp-thumb__trailer::after {
+  content: '';
+  margin-left: 3px;
+  border-style: solid;
+  border-width: 8px 0 8px 13px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.8);
+}
+
+/* Colonne « d'un coup d'œil » ---------------------------------------------- */
+
+.sp-capsule {
+  width: 308px;
+  aspect-ratio: 460 / 215;
+  background: #0e1519;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.sp-capsule img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Sans capsule, la place reste occupée au même format : deux fiches doivent
+   se comparer sans que l'une des deux ait bougé. */
+.sp-capsule__empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(150deg, #3c4a55, #222c34);
+  color: #6b7c89;
+  font-size: 44px;
+  font-weight: 700;
+}
+
+.sp-shortdesc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sp-text-2);
+  max-height: 68px;
+  overflow: hidden;
+}
+
+.sp-shortdesc.is-empty {
+  color: #6d7c88;
+  font-style: italic;
+}
+
+.sp-glance__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.sp-glance__label {
+  /* 118 px : la largeur qui tient « DATE DE PARUTION : » sur une ligne en
+     français. « ÉVALUATIONS RÉCENTES : » passe à la ligne, comme sur le
+     magasin — la valeur reste alignée sur la première. */
+  width: 118px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--sp-label);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sp-glance__value {
+  color: var(--sp-value);
+}
+
+.sp-glance__value--link {
+  color: var(--sp-blue);
+}
+
+.sp-review-summary {
+  font-weight: 700;
+}
+
+.sp-review-summary.tone-positive {
+  color: var(--sp-blue-dim);
+}
+
+.sp-review-summary.tone-mixed {
+  color: var(--sp-mixed);
+}
+
+.sp-review-summary.tone-negative {
+  color: var(--sp-negative);
+}
+
+.sp-review-summary.tone-none {
+  color: var(--sp-value);
+  font-weight: 400;
+}
+
+.sp-glance__tags {
+  margin-top: 14px;
+}
+
+.sp-glance__tags-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--sp-label);
+}
+
+.sp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.sp-tag {
+  background: var(--sp-blue-veil);
+  color: var(--sp-blue);
+  border-radius: 2px;
+  padding: 0 7px;
+  line-height: 19px;
+  font-size: 11px;
+}
+
+/* --- Bloc d'achat --------------------------------------------------------- */
+
+.sp-purchase {
+  margin: 16px 0 8px;
+  padding: 16px;
+  background: var(--sp-veil);
+}
+
+.sp-purchase__title {
+  margin: 0 0 12px;
+  font-size: 21px;
+  font-weight: 400;
+  color: #fff;
+}
+
+.sp-purchase__row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.sp-price {
+  font-size: 15px;
+  font-weight: 700;
+  color: #acdbf5;
+}
+
+/* Le bouton vert du magasin. Inerte : il ne mène nulle part, et c'est une
+   maquette — le seul bouton qui agit est celui de la liste de souhaits. */
+.sp-btn-green {
+  padding: 1px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #a4d007 5%, #536904 95%);
+}
+
+.sp-btn-green > span {
+  display: block;
+  padding: 0 15px;
+  line-height: 30px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #a4d007 5%, #536904 95%);
+  color: #d2e885;
+  font-size: 15px;
+}
+
+/* --- Rangée liste de souhaits / suivre / ignorer -------------------------- */
+
+.sp-queue {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.sp-queue__btn {
+  border: 0;
+  padding: 0 15px;
+  line-height: 30px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, rgba(103, 193, 245, 0.2) 5%, rgba(103, 193, 245, 0.1) 95%);
+  color: var(--sp-blue);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+/* Le seul bouton vivant de la page. */
+.sp-queue__btn--live {
+  cursor: pointer;
+}
+
+.sp-queue__btn--live:hover:not(:disabled) {
+  background: linear-gradient(to bottom, rgba(103, 193, 245, 0.4) 5%, rgba(103, 193, 245, 0.3) 95%);
+  color: #fff;
+}
+
+.sp-queue__btn--live:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Sur la liste de souhaits : le bouton change d'état, pas de place. */
+.sp-queue__btn.is-on {
+  background: linear-gradient(to bottom, #75b022 5%, #588a1b 95%);
+  color: #d2e885;
+}
+
+.sp-queue__btn.is-on:hover:not(:disabled) {
+  background: linear-gradient(to bottom, #8ed629 5%, #6ba421 95%);
+  color: #fff;
+}
+
+.sp-queue__check {
+  margin-right: 6px;
+}
+
+/* --- Corps : colonne principale + colonne droite -------------------------- */
+
+.sp-body {
+  display: grid;
+  grid-template-columns: 616px 308px;
+  gap: 16px;
+  align-items: start;
+}
+
+.sp-section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.sp-about {
+  margin-bottom: 28px;
+  padding: 16px;
+  background: var(--sp-veil);
+}
+
+.sp-about__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--sp-text-2);
+  white-space: pre-wrap;
+}
+
+.sp-about__text.is-empty {
+  color: #6d7c88;
+  font-style: italic;
+}
+
+/* Configuration requise ----------------------------------------------------- */
+
+.sp-sysreq {
+  margin-bottom: 28px;
+  padding: 16px;
+  background: var(--sp-veil);
+}
+
+.sp-sysreq__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.sp-sysreq__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.sp-sysreq__list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #acb2b8;
+}
+
+.sp-sysreq__list strong {
+  color: #c6d4df;
+  font-weight: 700;
+}
+
+/* Évaluations --------------------------------------------------------------- */
+
+.sp-reviews {
+  margin-bottom: 28px;
+}
+
+.sp-reviews__header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--sp-veil);
+  margin-bottom: 8px;
+}
+
+.sp-reviews__count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--sp-dim);
+}
+
+.sp-review {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--sp-veil);
+}
+
+.sp-review__author {
+  font-size: 12px;
+  color: var(--sp-dim);
+  line-height: 1.6;
+}
+
+.sp-review__name {
+  display: block;
+  color: var(--sp-blue);
+}
+
+.sp-review__verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #fff;
+}
+
+.sp-review__thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.sp-review__thumb.is-up {
+  color: var(--sp-blue-dim);
+}
+
+.sp-review__thumb.is-down {
+  color: var(--sp-negative);
+}
+
+.sp-review__score {
+  font-size: 12px;
+  color: var(--sp-dim);
+}
+
+.sp-review__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sp-text-2);
+  white-space: pre-wrap;
+}
+
+.sp-review__note.is-empty {
+  color: #6d7c88;
+  font-style: italic;
+}
+
+.sp-review__date {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--sp-dim);
+}
+
+/* Colonne de droite --------------------------------------------------------- */
+
+.sp-block {
+  margin-bottom: 16px;
+  background: var(--sp-veil);
+}
+
+.sp-block__header {
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  color: #fff;
+}
+
+.sp-block__body {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--sp-value);
+  line-height: 1.6;
+}
+
+.sp-relevant__text {
+  margin: 0 0 10px;
+}
+
+.sp-btn-blue {
+  display: inline-block;
+  padding: 0 15px;
+  line-height: 26px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, rgba(103, 193, 245, 0.2) 5%, rgba(103, 193, 245, 0.1) 95%);
+  color: var(--sp-blue);
+  font-size: 12px;
+}
+
+.sp-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sp-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--sp-text-2);
+}
+
+.sp-features li:last-child {
+  border-bottom: 0;
+}
+
+.sp-features svg {
+  flex-shrink: 0;
+  fill: var(--sp-value);
+}
+
+.sp-langs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sp-langs th,
+.sp-langs td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+  color: var(--sp-value);
+}
+
+.sp-langs th {
+  color: var(--sp-dim);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.sp-langs th:first-child,
+.sp-langs td:first-child {
+  text-align: left;
+  color: var(--sp-text-2);
+}
+
+.sp-langs .sp-check {
+  color: var(--sp-blue);
+}
+
+.sp-details__row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.sp-details__label {
+  width: 106px;
+  flex-shrink: 0;
+  color: var(--sp-dim);
+}
+
+.sp-details__value {
+  color: var(--sp-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-details__value--link {
+  color: var(--sp-blue);
+}
+
+/* --- Jeux similaires ------------------------------------------------------- */
+
+.sp-similar {
+  margin-top: 32px;
+}
+
+.sp-similar__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.sp-similar__card {
+  height: 69px;
+  padding: 8px;
+  display: flex;
+  align-items: flex-end;
+  background: linear-gradient(135deg, #34495c 0%, #1d2c39 100%);
+  border-radius: 2px;
+  font-size: 12px;
+  color: #dbe3ea;
+  overflow: hidden;
+}
+
+.sp-similar__empty {
+  margin: 0;
+  font-size: 13px;
+  color: #6d7c88;
+  font-style: italic;
+}
+
+/* --- Petits écrans --------------------------------------------------------- */
+
+/*
+ * Pas de version mobile : le photomontage doit rester le photomontage. On
+ * l'éloigne, on ne le réécrit pas. `zoom` recalcule la mise en page — contrairement
+ * à `transform: scale`, qui laisserait une hauteur fausse derrière lui — et ce
+ * qui dépasse encore se fait défiler horizontalement.
+ */
+@media (max-width: 980px) {
+  .sp-mock {
+    zoom: 0.8;
+  }
+}
+
+@media (max-width: 760px) {
+  .sp-mock {
+    zoom: 0.62;
+  }
+}
+
+@media (max-width: 560px) {
+  .sp-mock {
+    zoom: 0.45;
+  }
+}
