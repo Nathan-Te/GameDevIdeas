@@ -36,7 +36,8 @@ const SELECT_IDEA = `
          v.score      AS verdict_score,
          v.note       AS verdict_note,
          v.created_at AS verdict_created_at,
-         c.path       AS capsule_path
+         c.path       AS capsule_path,
+         (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count
   FROM ideas i
   ${CURRENT_VERDICT_JOIN}
   ${CAPSULE_JOIN}
@@ -59,6 +60,8 @@ export function serializeIdea(row) {
     capsule_file_id: row.capsule_file_id,
     /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
     capsule_url: fileUrl(row.capsule_path),
+    /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
+    attachment_count: row.attachment_count ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at,
@@ -232,6 +235,41 @@ export function restoreIdea(db, slug) {
     .run(now(), existing.id);
 
   return serializeIdea(db.prepare(`${SELECT_IDEA} WHERE i.id = ?`).get(existing.id));
+}
+
+/**
+ * Suppression définitive. N'accepte qu'une idée déjà en corbeille : purger une
+ * idée vivante en un appel serait une perte de données à un clic de distance.
+ *
+ * Tout part dans une transaction — verdicts, lignes de pièces jointes, puis
+ * l'idée. Les clés étrangères en cascade suffiraient, mais l'ordre est écrit :
+ * c'est cette opération-là qui doit rester lisible dans six mois.
+ *
+ * Les fichiers du disque sont effacés **ensuite**, par l'appelant, jamais
+ * avant : la règle du projet veut que la ligne parte avant le fichier. Les
+ * chemins sont donc relevés avant la transaction et renvoyés avec l'idée.
+ */
+export function purgeIdea(db, slug) {
+  const existing = findIdeaBySlug(db, slug, { includeDeleted: true });
+
+  if (!existing || !existing.deleted_at) {
+    throw notFound(`Aucune idée supprimée avec le slug « ${slug} ».`);
+  }
+
+  const files = db
+    .prepare('SELECT path FROM attachments WHERE idea_id = ? AND path IS NOT NULL')
+    .all(existing.id)
+    .map((row) => row.path);
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM verdicts WHERE idea_id = ?').run(existing.id);
+    // La capsule pointe sur une pièce jointe : on lâche la référence d'abord.
+    db.prepare('UPDATE ideas SET capsule_file_id = NULL WHERE id = ?').run(existing.id);
+    db.prepare('DELETE FROM attachments WHERE idea_id = ?').run(existing.id);
+    db.prepare('DELETE FROM ideas WHERE id = ?').run(existing.id);
+  })();
+
+  return { idea: existing, files };
 }
 
 export function listVerdicts(db, ideaId) {

@@ -16,6 +16,8 @@ Reprises telles quelles de la section 8 du seed :
 - La base n'est jamais modifiée sans migration numérotée ; aucune migration livrée n'est réécrite après coup.
 - Les fichiers utilisateur ne vont jamais en base.
 - Un fichier supprimé en base est supprimé sur disque dans la même opération ; jamais l'inverse.
+- Une purge supprime la base puis le dossier de l'idée ; jamais de purge partielle.
+- Le lookup de titre ne contacte jamais une adresse privée ou locale.
 - Tout HTML issu d'un contenu utilisateur (markdown, labels) passe par DOMPurify avant insertion.
 - L'API renvoie toujours du JSON, erreurs comprises (`{ error, message }`).
 - Pas de dépendance ajoutée sans la justifier dans le README du lot.
@@ -61,6 +63,7 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `POST /api/ideas` | Création. |
 | `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id`), corbeille. |
 | `POST /api/ideas/:slug/restore` | Sort l'idée de la corbeille. 404 si elle n'y est pas. |
+| `DELETE /api/ideas/:slug/purge` | Suppression définitive. N'accepte qu'une idée en corbeille (404 sinon) : verdicts, pièces jointes et idée dans une transaction, puis `data/files/{idea_id}/` en entier. |
 | `GET`, `POST /api/ideas/:slug/verdicts` | Historique et ajout d'un verdict. |
 | `GET`, `POST /api/ideas/:slug/attachments` | Liste ; ajout par multipart (fichiers) ou JSON `{ url, label? }` (lien). |
 | `PUT /api/ideas/:slug/attachments/order` | Réordonne, `{ ids: [...] }` complet, en une transaction. |
@@ -68,11 +71,13 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. |
 | Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
 
+Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam` (vue « page store », en lecture seule, filtres du catalogue transmis par la query pour enchaîner les idées) et `/corbeille`.
+
 ## Plan en lots
 
 - **Lot 1 — Socle** : livré. Dépôt, Docker, schéma, API idées et verdicts, catalogue et page idée.
 - **Lot 2 — Pièces jointes** : livré. Upload, liens typés, markdown rendu, capsule, galerie, `restore`.
-- **Lot 3 — Vitrine** : à venir. **La corbeille en premier** (l'interface manque encore à `restore`), puis vue Steam, passe de DA et responsive.
+- **Lot 3 — Vitrine** : livré. Corbeille et purge, vue Steam, feuille de tokens, passe de DA et responsive. **La v1 est close.**
 
 ## Convention des migrations
 
@@ -101,7 +106,8 @@ server/           API Fastify + SQLite (JavaScript ESM, pas de build)
                   files.js (disque et garde de chemin), links.js (liens typés)
   test/           node:test, une base en mémoire par test
 web/              Front React + Vite + TypeScript
-  src/            api (client typé), router, pages, composants, styles.css
+  src/            api (client typé), router, filters (filtres d'URL partagés),
+                  pages, composants, tokens.css puis styles.css
 Docs/             seed-vitrine.md (source de vérité) et lots/
 scripts/          ntfy-notify.mjs (hooks Claude Code)
 data/             base SQLite et fichiers utilisateur — jamais commité
@@ -116,6 +122,7 @@ data/             base SQLite et fichiers utilisateur — jamais commité
 - Front sans bibliothèque d'état global ni de routage : `fetch` + un client typé (`web/src/api.ts`), un routeur maison (`web/src/router.tsx`). L'envoi de fichiers passe par XHR, seul moyen d'obtenir une progression d'upload.
 - Les fichiers utilisateur ne sont jamais atteints par un chemin construit à la main : tout passe par `resolveInsideFiles` (`server/src/files.js`), qui renvoie `null` dès que la résolution sort de `data/files/`.
 - Direction artistique : sombre, sobre, un seul accent chaud (`--accent`), pas d'animation gratuite, lisible sur mobile.
+- **Toute la direction artistique tient dans `web/src/tokens.css`** : couleurs, espacements, rayons, typographie, formats et durées. `styles.css` l'importe en première ligne et ne contient plus une seule couleur littérale — une valeur en dur y est soit une géométrie, soit un oubli.
 - Commentaires et interface en français.
 
 ## Hooks

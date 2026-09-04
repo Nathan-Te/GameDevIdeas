@@ -294,11 +294,16 @@ test('fetchLinkTitle lit le titre d’une page et abandonne proprement', async (
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
 
+  // `allowPrivateHosts` : depuis le lot 3, le lookup refuse les adresses
+  // privées et locales — dont ce `127.0.0.1`. Ce test-ci porte sur la lecture
+  // du `<title>`, pas sur la politique réseau ; celle-ci est testée à part.
+  const options = { allowPrivateHosts: true };
+
   try {
-    assert.equal(await fetchLinkTitle(`${base}/ok`), 'Le board & co');
-    assert.equal(await fetchLinkTitle(`${base}/sans-titre`), null);
-    assert.equal(await fetchLinkTitle(`${base}/erreur`), null);
-    assert.equal(await fetchLinkTitle('pas une url'), null);
+    assert.equal(await fetchLinkTitle(`${base}/ok`, options), 'Le board & co');
+    assert.equal(await fetchLinkTitle(`${base}/sans-titre`, options), null);
+    assert.equal(await fetchLinkTitle(`${base}/erreur`, options), null);
+    assert.equal(await fetchLinkTitle('pas une url', options), null);
   } finally {
     server.close();
   }

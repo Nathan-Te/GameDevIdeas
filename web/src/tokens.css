@@ -1,0 +1,130 @@
+/*
+ * tokens.css — la feuille unique de la direction artistique.
+ *
+ * Couleurs, espacements, rayons, typographie : tout ce qui se règle une fois et
+ * se lit partout. Aucune règle de mise en page ici, aucun sélecteur autre que
+ * `:root` — une valeur qui n'est pas partagée par au moins deux endroits n'a
+ * rien à y faire, elle reste dans `styles.css`.
+ *
+ * La ligne du seed : sombre, sobre, un seul accent chaud. Un seul `--accent`
+ * existe, et c'est volontaire : ce qui est accentué est ce qui compte.
+ */
+
+:root {
+  /* --- Fonds et surfaces -------------------------------------------------- */
+  --bg: #101214;
+  /* Le fond des cartes et panneaux. */
+  --panel: #171a1e;
+  /* Un cran plus clair : champs, boutons, puces — ce qui se clique. */
+  --panel-2: #1d2126;
+  /* Encore un cran : survol d'une surface déjà claire. */
+  --panel-3: #242930;
+  /* Voile posé sur une image (bandeau de capsule, actions au survol). */
+  --scrim: rgba(9, 11, 13, 0.72);
+  /* Le fond d'une visionneuse : on ne doit plus voir la page derrière. */
+  --scrim-strong: rgba(8, 9, 11, 0.92);
+  /* Le fond d'une capsule absente, et l'initiale qu'on y pose. */
+  --capsule-bg: linear-gradient(150deg, #1c2126, #14181c);
+  --capsule-initial: #333b43;
+
+  /* --- Traits ------------------------------------------------------------- */
+  --line: #2a3037;
+  --line-soft: #22272c;
+  --line-strong: #3a424a;
+
+  /* --- Texte -------------------------------------------------------------- */
+  --text: #e8eaec;
+  --text-dim: #b3bcc4;
+  --muted: #8b959d;
+  /* Texte d'un champ vide, d'un placeholder : présent mais pas à lire. */
+  --faint: #5d666e;
+  /* Un cran plus bas encore : une absence de valeur, un tiret. */
+  --faint-2: #4d565d;
+  /* Voile de survol posé sur une surface, quelle que soit sa couleur. */
+  --hover-veil: rgba(255, 255, 255, 0.035);
+
+  /* --- Accent ------------------------------------------------------------- */
+  --accent: #e07a3c;
+  --accent-bright: #f08d4d;
+  --accent-soft: rgba(224, 122, 60, 0.13);
+  --accent-line: rgba(224, 122, 60, 0.4);
+  --accent-line-soft: rgba(224, 122, 60, 0.32);
+  /* Le texte posé sur un aplat d'accent : presque noir, jamais blanc. */
+  --on-accent: #17110b;
+
+  /* --- États -------------------------------------------------------------- */
+  --danger: #d4675c;
+  --danger-soft: rgba(212, 103, 92, 0.12);
+  --danger-line: rgba(212, 103, 92, 0.45);
+  --danger-text: #eab3ad;
+  --success: #7fc4a0;
+  --success-line: rgba(127, 196, 160, 0.35);
+  --success-soft: rgba(127, 196, 160, 0.1);
+
+  /* --- Rayons ------------------------------------------------------------- */
+  --radius-sm: 5px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* --- Espacements -------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+  --space-7: 36px;
+  --space-8: 48px;
+  /* L'écart de référence entre deux blocs de même niveau. */
+  --gap: var(--space-5);
+
+  /* --- Typographie -------------------------------------------------------- */
+  --font: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  /* Échelle relevée sur l'existant plutôt qu'inventée : ces neuf tailles sont
+     celles que le lot 1 et le lot 2 utilisaient déjà. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  /* La taille des contrôles : boutons, champs, sélecteurs. */
+  --text-ui: 14px;
+  --text-base: 15px;
+  --text-lg: 16px;
+  --text-xl: 22px;
+  --text-2xl: 26px;
+  --text-display: 28px;
+
+  --leading-tight: 1.25;
+  --leading: 1.55;
+  --leading-prose: 1.65;
+  /* L'interlettrage des étiquettes en capitales — jamais du texte courant. */
+  --tracking-label: 0.08em;
+
+  /* --- Formats ------------------------------------------------------------ */
+  /* Le format d'une capsule Steam. Utilisé partout où une capsule s'affiche. */
+  --capsule-ratio: 460 / 215;
+  /* Une capture de la galerie : le format d'une image de jeu. */
+  --shot-ratio: 16 / 9;
+
+  /* --- Mouvement ---------------------------------------------------------- */
+  /* Pas d'animation gratuite : ces durées ne servent qu'à signaler un état. */
+  --ease: 0.12s ease;
+  --ease-slow: 0.2s ease;
+
+  /* --- Empilement --------------------------------------------------------- */
+  --z-sticky: 10;
+  --z-overlay: 100;
+
+  color-scheme: dark;
+}
+
+/* Le mouvement reste une commodité : qui n'en veut pas ne doit pas en avoir. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease: 0s;
+    --ease-slow: 0s;
+  }
+}

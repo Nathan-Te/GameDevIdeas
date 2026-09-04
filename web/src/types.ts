@@ -111,6 +111,8 @@ export interface Idea {
   capsule_file_id: number | null;
   /** Adresse de cette image, ou `null` tant qu'aucune capsule n'est choisie. */
   capsule_url: string | null;
+  /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
+  attachment_count: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -146,4 +148,14 @@ export interface IdeaFilters {
   status?: Status | '';
   minScore?: number | '';
   sort?: Sort;
+  /** `true` : la corbeille au lieu du catalogue. */
+  deleted?: boolean;
+}
+
+/** Ce que renvoie une purge : de quoi dire ce qui vient de partir. */
+export interface PurgeResult {
+  purged: Idea;
+  files_removed: number;
+  /** La base est propre mais le dossier de fichiers est resté sur le disque. */
+  orphan_directory: boolean;
 }

@@ -2,43 +2,23 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api, ApiError } from '../api';
 import { formatPrice, ScoreBadge, StatusBadge } from '../components/badges';
+import {
+  filtersFromSearch,
+  hasActiveFilters,
+  searchFromFilters,
+  SORTS,
+  steamHref,
+} from '../filters';
 import { Link, navigate } from '../router';
 import { FAMILIES, FAMILY_LABELS, SORT_LABELS, STATUS_LABELS, STATUSES } from '../types';
 import type { Family, Idea, IdeaFilters, Sort, Status } from '../types';
 
-const SORTS: Sort[] = ['updated', 'created', 'score', 'title'];
-
-/** Les filtres vivent dans l'URL : un catalogue filtré se met en favori et se recharge. */
-function filtersFromSearch(search: string): IdeaFilters {
-  const params = new URLSearchParams(search);
-  const family = params.get('family') ?? '';
-  const status = params.get('status') ?? '';
-  const minScore = params.get('minScore') ?? '';
-  const sort = params.get('sort') ?? 'updated';
-
-  return {
-    family: (FAMILIES as readonly string[]).includes(family) ? (family as Family) : '',
-    status: (STATUSES as readonly string[]).includes(status) ? (status as Status) : '',
-    minScore: /^[0-5]$/.test(minScore) ? Number(minScore) : '',
-    sort: (SORTS as string[]).includes(sort) ? (sort as Sort) : 'updated',
-  };
-}
-
-function searchFromFilters(filters: IdeaFilters): string {
-  const params = new URLSearchParams();
-  if (filters.family) params.set('family', filters.family);
-  if (filters.status) params.set('status', filters.status);
-  if (filters.minScore !== '' && filters.minScore !== undefined) {
-    params.set('minScore', String(filters.minScore));
-  }
-  if (filters.sort && filters.sort !== 'updated') params.set('sort', filters.sort);
-  const qs = params.toString();
-  return qs ? `?${qs}` : '';
-}
-
 export function Catalogue() {
-  const [filters, setFilters] = useState<IdeaFilters>(() => filtersFromSearch(window.location.search));
+  const [filters, setFilters] = useState<IdeaFilters>(() =>
+    filtersFromSearch(window.location.search),
+  );
   const [ideas, setIdeas] = useState<Idea[] | null>(null);
+  const [trashed, setTrashed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -57,6 +37,25 @@ export function Catalogue() {
     window.history.replaceState({}, '', `/${searchFromFilters(filters)}`);
   }, [filters, load]);
 
+  /**
+   * Le compteur de la corbeille, chargé à part : il ne dépend pas des filtres
+   * et son échec ne doit pas priver Nathan de son catalogue.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listIdeas({ deleted: true })
+      .then((list) => {
+        if (!cancelled) setTrashed(list.length);
+      })
+      .catch(() => {
+        if (!cancelled) setTrashed(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function update(patch: Partial<IdeaFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
   }
@@ -72,7 +71,8 @@ export function Catalogue() {
     }
   }
 
-  const active = Boolean(filters.family || filters.status || filters.minScore !== '');
+  const active = hasActiveFilters(filters);
+  const search = searchFromFilters(filters);
 
   return (
     <div className="page">
@@ -85,9 +85,21 @@ export function Catalogue() {
               : `${ideas.length} idée${ideas.length > 1 ? 's' : ''}${active ? ' (filtrées)' : ''}`}
           </p>
         </div>
-        <button type="button" className="button button--accent" onClick={createIdea} disabled={creating}>
-          {creating ? 'Création…' : 'Nouvelle idée'}
-        </button>
+
+        <div className="page__actions">
+          <Link to="/corbeille" className="button button--ghost">
+            Corbeille
+            {trashed > 0 && <span className="button__count">{trashed}</span>}
+          </Link>
+          <button
+            type="button"
+            className="button button--accent"
+            onClick={createIdea}
+            disabled={creating}
+          >
+            {creating ? 'Création…' : 'Nouvelle idée'}
+          </button>
+        </div>
       </header>
 
       <section className="filters" aria-label="Filtres du catalogue">
@@ -124,8 +136,14 @@ export function Catalogue() {
         <label className="filters__field">
           <span>Score min.</span>
           <select
-            value={filters.minScore === '' || filters.minScore === undefined ? '' : String(filters.minScore)}
-            onChange={(event) => update({ minScore: event.target.value === '' ? '' : Number(event.target.value) })}
+            value={
+              filters.minScore === '' || filters.minScore === undefined
+                ? ''
+                : String(filters.minScore)
+            }
+            onChange={(event) =>
+              update({ minScore: event.target.value === '' ? '' : Number(event.target.value) })
+            }
           >
             <option value="">Indifférent</option>
             {[0, 1, 2, 3, 4, 5].map((score) => (
@@ -138,7 +156,10 @@ export function Catalogue() {
 
         <label className="filters__field">
           <span>Tri</span>
-          <select value={filters.sort ?? 'updated'} onChange={(event) => update({ sort: event.target.value as Sort })}>
+          <select
+            value={filters.sort ?? 'updated'}
+            onChange={(event) => update({ sort: event.target.value as Sort })}
+          >
             {SORTS.map((sort) => (
               <option key={sort} value={sort}>
                 {SORT_LABELS[sort]}
@@ -161,40 +182,90 @@ export function Catalogue() {
       {error && <p className="notice notice--error">{error}</p>}
 
       {ideas !== null && ideas.length === 0 && !error && (
-        <p className="notice">
-          {active
-            ? 'Aucune idée ne correspond à ces filtres.'
-            : 'Le catalogue est vide. Commence par une nouvelle idée.'}
-        </p>
+        <div className="empty">
+          {active ? (
+            <>
+              <p className="empty__title">Aucune idée ne correspond à ces filtres.</p>
+              <p className="empty__text">
+                Il y en a peut-être derrière un autre statut, ou sous un score plus bas.
+              </p>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() =>
+                  setFilters({ family: '', status: '', minScore: '', sort: filters.sort })
+                }
+              >
+                Effacer les filtres
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="empty__title">Le catalogue est vide.</p>
+              <p className="empty__text">
+                Une idée, une page, un verdict daté. Commence par la première.
+              </p>
+              <button
+                type="button"
+                className="button button--accent"
+                onClick={createIdea}
+                disabled={creating}
+              >
+                Nouvelle idée
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       <div className="grid">
         {(ideas ?? []).map((idea) => (
-          <IdeaCard key={idea.id} idea={idea} />
+          <IdeaCard key={idea.id} idea={idea} search={search} />
         ))}
       </div>
     </div>
   );
 }
 
-function IdeaCard({ idea }: { idea: Idea }) {
+/**
+ * Une carte du catalogue. Toute la carte mène à la page d'édition — c'est la
+ * cible naturelle — et « Voir la page » ouvre la vue Steam par-dessus.
+ *
+ * La carte n'est donc pas un `<a>` englobant : un lien dans un lien n'est pas
+ * du HTML valide, et le navigateur en fait ce qu'il veut. Le titre porte le
+ * lien, étendu à toute la carte par un `::after` ; « Voir la page » repasse
+ * au-dessus par son empilement.
+ */
+function IdeaCard({ idea, search }: { idea: Idea; search: string }) {
   const price = formatPrice(idea.price_cents);
+  const title = idea.title || 'Sans titre';
 
   return (
-    <Link to={`/idees/${idea.slug}`} className="card">
-      {/* La capsule choisie parmi les images attachées, sinon l'initiale du titre. */}
-      <div className="card__capsule" aria-hidden="true">
+    <article className="card">
+      <div className="card__capsule">
         {idea.capsule_url ? (
           <img className="card__capsule-image" src={idea.capsule_url} alt="" loading="lazy" />
         ) : (
-          <span className="card__capsule-initial">
-            {(idea.title || '?').trim().charAt(0).toUpperCase()}
+          <span className="card__capsule-initial" aria-hidden="true">
+            {title.trim().charAt(0).toUpperCase()}
           </span>
         )}
+
+        <Link
+          to={steamHref(idea.slug, search)}
+          className="card__steam"
+          title={`Voir « ${title} » en page de magasin`}
+        >
+          Voir la page
+        </Link>
       </div>
 
       <div className="card__body">
-        <h2 className="card__title">{idea.title || 'Sans titre'}</h2>
+        <h2 className="card__title">
+          <Link to={`/idees/${encodeURIComponent(idea.slug)}`} className="card__link">
+            {title}
+          </Link>
+        </h2>
         <p className={`card__tagline ${idea.tagline ? '' : 'is-empty'}`}>
           {idea.tagline || 'Pas encore d’accroche'}
         </p>
@@ -205,6 +276,6 @@ function IdeaCard({ idea }: { idea: Idea }) {
           <ScoreBadge score={idea.current_verdict?.score ?? null} />
         </div>
       </div>
-    </Link>
+    </article>
   );
 }

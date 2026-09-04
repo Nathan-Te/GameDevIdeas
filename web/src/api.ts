@@ -1,4 +1,12 @@
-import type { Attachment, AttachmentPatch, Idea, IdeaFilters, IdeaPatch, Verdict } from './types';
+import type {
+  Attachment,
+  AttachmentPatch,
+  Idea,
+  IdeaFilters,
+  IdeaPatch,
+  PurgeResult,
+  Verdict,
+} from './types';
 
 /**
  * Petit client typé au-dessus de `fetch`. Pas de bibliothèque d'état global :
@@ -59,6 +67,7 @@ function query(filters: IdeaFilters): string {
     params.set('minScore', String(filters.minScore));
   }
   if (filters.sort) params.set('sort', filters.sort);
+  if (filters.deleted) params.set('deleted', 'true');
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
@@ -104,6 +113,16 @@ export const api = {
 
   async restoreIdea(slug: string): Promise<Idea> {
     return request<Idea>(`/api/ideas/${encodeURIComponent(slug)}/restore`, { method: 'POST' });
+  },
+
+  /**
+   * Suppression définitive. N'accepte qu'une idée déjà en corbeille ; le
+   * serveur efface la base puis le dossier de fichiers de l'idée.
+   */
+  purgeIdea(slug: string): Promise<PurgeResult> {
+    return request<PurgeResult>(`/api/ideas/${encodeURIComponent(slug)}/purge`, {
+      method: 'DELETE',
+    });
   },
 
   // --- Pièces jointes -------------------------------------------------------

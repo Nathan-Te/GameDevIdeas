@@ -7,8 +7,8 @@ import { EditableText } from './EditableText';
 import { GripIcon, KindIcon, LinkIcon } from './icons';
 import { Lightbox } from './Lightbox';
 import { MarkdownFile } from './Markdown';
-import { LINK_TYPE_LABELS } from '../types';
-import type { Attachment } from '../types';
+import { LINK_TYPE_LABELS, LINK_TYPES } from '../types';
+import type { Attachment, LinkType } from '../types';
 
 /** Un envoi en cours : une barre par fichier, comme demandé au lot. */
 interface Upload {
@@ -127,6 +127,23 @@ export function Attachments({
     );
   }
 
+  /**
+   * Le type d'un lien est deviné sur le domaine à la création. Un lien Notion
+   * vers un dépôt reste marqué « Lien » : c'est le point 5 laissé ouvert au lot
+   * 2, et la route `PATCH` l'acceptait déjà.
+   */
+  async function retype(attachment: Attachment, link_type: LinkType) {
+    try {
+      setError(null);
+      const updated = await api.updateAttachment(attachment.id, { link_type });
+      setAttachments((current) =>
+        (current ?? []).map((item) => (item.id === updated.id ? updated : item)),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Type de lien non enregistré.');
+    }
+  }
+
   async function remove(attachment: Attachment) {
     const what = attachment.kind === 'link' ? 'ce lien' : `« ${attachment.label} »`;
     if (!window.confirm(`Supprimer ${what} ? C'est définitif.`)) return;
@@ -241,6 +258,7 @@ export function Attachments({
           images={images}
           onReorder={commitOrder}
           onRename={rename}
+          onRetype={retype}
           onRemove={remove}
           onCapsuleChange={onCapsuleChange}
           onView={setViewing}
@@ -361,6 +379,7 @@ function AttachmentList({
   images,
   onReorder,
   onRename,
+  onRetype,
   onRemove,
   onCapsuleChange,
   onView,
@@ -370,6 +389,7 @@ function AttachmentList({
   images: Attachment[];
   onReorder: (ordered: Attachment[]) => void | Promise<void>;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
+  onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
   onView: (index: number) => void;
@@ -468,6 +488,7 @@ function AttachmentList({
             isCapsule={attachment.id === capsuleFileId}
             galleryIndex={images.findIndex((image) => image.id === attachment.id)}
             onRename={onRename}
+            onRetype={onRetype}
             onRemove={onRemove}
             onCapsuleChange={onCapsuleChange}
             onView={onView}
@@ -483,6 +504,7 @@ function AttachmentCard({
   isCapsule,
   galleryIndex,
   onRename,
+  onRetype,
   onRemove,
   onCapsuleChange,
   onView,
@@ -491,6 +513,7 @@ function AttachmentCard({
   isCapsule: boolean;
   galleryIndex: number;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
+  onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
   onView: (index: number) => void;
@@ -554,6 +577,22 @@ function AttachmentCard({
       </div>
 
       <div className="attachment__actions">
+        {attachment.kind === 'link' && (
+          <select
+            className="select select--compact"
+            value={attachment.link_type ?? 'autre'}
+            aria-label={`Type du lien ${attachment.label}`}
+            title="Type du lien — pilote l’icône"
+            onChange={(event) => void onRetype(attachment, event.target.value as LinkType)}
+          >
+            {LINK_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {LINK_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        )}
+
         {attachment.kind === 'markdown' && (
           <button
             type="button"

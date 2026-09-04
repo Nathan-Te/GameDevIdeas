@@ -126,6 +126,11 @@ export function IdeaPage({ slug }: { slug: string }) {
         <span className={`idea__saved ${saved ? 'is-visible' : ''}`} role="status" aria-live="polite">
           {saved ? 'Enregistré' : ''}
         </span>
+        {/* La vue Steam est la raison d'être de l'application : elle se rejoint
+            d'un clic depuis la fiche, et sans quitter l'idée en cours. */}
+        <Link to={`/idees/${encodeURIComponent(idea.slug)}/steam`} className="button">
+          Voir la page
+        </Link>
         <button type="button" className="button button--danger-ghost" onClick={remove}>
           Corbeille
         </button>
@@ -306,7 +311,7 @@ function PriceField({ cents, onSave }: { cents: number | null; onSave: (cents: n
   return (
     <EditableText
       label="le prix en euros"
-      className="idea__price"
+      className="idea__price idea__price--nowrap"
       value={display ? formatPrice(cents) : ''}
       placeholder="—"
       onSave={(next) => {

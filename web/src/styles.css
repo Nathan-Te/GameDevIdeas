@@ -1,34 +1,14 @@
+@import './tokens.css';
+
 /*
  * Direction artistique : sombre, sobre, un seul accent chaud.
  * Pas d'animation gratuite — seules les transitions qui signalent un état
  * (survol, focus, « enregistré ») sont conservées.
+ *
+ * Les couleurs, espacements, rayons et tailles de texte vivent dans
+ * `tokens.css` et nulle part ailleurs : une valeur littérale dans ce fichier
+ * est soit une géométrie (une largeur de colonne), soit un oubli.
  */
-
-:root {
-  --bg: #101214;
-  --panel: #171a1e;
-  --panel-2: #1d2126;
-  --line: #2a3037;
-  --line-soft: #22272c;
-
-  --text: #e8eaec;
-  --text-dim: #b3bcc4;
-  --muted: #8b959d;
-
-  --accent: #e07a3c;
-  --accent-bright: #f08d4d;
-  --accent-soft: rgba(224, 122, 60, 0.13);
-
-  --danger: #d4675c;
-
-  --radius: 8px;
-  --radius-lg: 12px;
-  --gap: 20px;
-
-  --font: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
-
-  color-scheme: dark;
-}
 
 * {
   box-sizing: border-box;
@@ -44,7 +24,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -87,9 +67,27 @@ a {
   margin-bottom: 24px;
 }
 
+.page__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.page__crumb {
+  display: inline-block;
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+
+.page__crumb:hover {
+  color: var(--text);
+}
+
 .page__title {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -97,7 +95,7 @@ a {
 .page__subtitle {
   margin: 2px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 /* --- Boutons ------------------------------------------------------------ */
@@ -109,13 +107,27 @@ a {
   border-radius: var(--radius);
   background: var(--panel-2);
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-ui);
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: border-color var(--ease), background var(--ease), color var(--ease);
 }
 
 .button:hover:not(:disabled) {
-  border-color: #3a424a;
+  border-color: var(--line-strong);
+}
+
+/* Le compteur de la corbeille, collé au libellé de son bouton. */
+.button__count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: var(--space-2);
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
 }
 
 .button:disabled {
@@ -126,7 +138,7 @@ a {
 .button--accent {
   background: var(--accent);
   border-color: var(--accent);
-  color: #17110b;
+  color: var(--on-accent);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -144,7 +156,7 @@ a {
   background: transparent;
   color: var(--muted);
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .button--danger-ghost:hover {
@@ -174,10 +186,16 @@ a {
 }
 
 .filters__field > span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted);
+}
+
+/* Le sélecteur de type d'un lien tient dans une rangée d'actions. */
+.select--compact {
+  padding: 3px 6px;
+  font-size: var(--text-sm);
 }
 
 .filters select,
@@ -186,7 +204,7 @@ a {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: var(--text-ui);
   cursor: pointer;
 }
 
@@ -198,29 +216,74 @@ a {
   gap: var(--gap);
 }
 
+/* La carte n'est pas un lien : elle en contient deux (la fiche, la vue Steam),
+   et un `<a>` dans un `<a>` n'est pas du HTML valide. Le titre porte le lien
+   principal, étendu à toute la carte par un `::after`. */
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  transition: border-color var(--ease), transform var(--ease);
 }
 
-.card:hover {
-  border-color: #3a424a;
+.card:hover,
+.card:focus-within {
+  border-color: var(--line-strong);
   transform: translateY(-1px);
+}
+
+.card__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/* « Voir la page » repasse au-dessus de la zone cliquable du titre. Discret sur
+   un écran qui survole, toujours visible sur un écran qui ne survole pas. */
+.card__steam {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 1;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--scrim);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  opacity: 0;
+  transition: opacity var(--ease), color var(--ease), border-color var(--ease);
+}
+
+.card:hover .card__steam,
+.card__steam:focus-visible {
+  opacity: 1;
+}
+
+.card__steam:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+@media (hover: none) {
+  .card__steam {
+    opacity: 1;
+  }
 }
 
 /* Capsule : 460 x 215, le format d'une capsule Steam. Une image attachée peut
    la remplacer ; sinon on garde l'initiale du titre sur un dégradé. */
 .card__capsule {
-  aspect-ratio: 460 / 215;
+  position: relative;
+  aspect-ratio: var(--capsule-ratio);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(150deg, #1c2126, #14181c);
+  background: var(--capsule-bg);
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -235,7 +298,7 @@ a {
 .card__capsule-initial {
   font-size: 34px;
   font-weight: 600;
-  color: #333b43;
+  color: var(--capsule-initial);
   user-select: none;
 }
 
@@ -249,23 +312,31 @@ a {
 
 .card__title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.3;
+  /* Une ligne, coupée proprement : un titre long ne pousse pas sa voisine. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card__tagline {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
+  line-height: 1.45;
   color: var(--text-dim);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* Deux lignes réservées, remplies ou non : la rangée de badges reste alignée
+     d'une carte à l'autre. */
+  min-height: calc(2 * 1.45em);
 }
 
 .card__tagline.is-empty {
-  color: #5d666e;
+  color: var(--faint);
   font-style: italic;
 }
 
@@ -278,7 +349,7 @@ a {
 }
 
 .card__price {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -287,8 +358,8 @@ a {
 .badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.02em;
   border: 1px solid var(--line);
@@ -300,37 +371,37 @@ a {
 .badge--status.status-prototype,
 .badge--status.status-en-cours {
   color: var(--accent);
-  border-color: rgba(224, 122, 60, 0.4);
+  border-color: var(--accent-line);
   background: var(--accent-soft);
 }
 
 .badge--status.status-publie {
-  color: #7fc4a0;
-  border-color: rgba(127, 196, 160, 0.35);
-  background: rgba(127, 196, 160, 0.1);
+  color: var(--success);
+  border-color: var(--success-line);
+  background: var(--success-soft);
 }
 
 .badge--status.status-abandonne {
-  color: #737d85;
+  color: var(--faint);
 }
 
 .score {
   margin-left: auto;
-  font-size: 14px;
+  font-size: var(--text-ui);
   font-weight: 600;
   color: var(--accent);
   white-space: nowrap;
 }
 
 .score__max {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 400;
   color: var(--muted);
 }
 
 .score--none {
   margin-left: auto;
-  color: #4d565d;
+  color: var(--faint-2);
 }
 
 /* --- Page idée ---------------------------------------------------------- */
@@ -344,7 +415,7 @@ a {
 
 .idea__back {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-ui);
 }
 
 .idea__back:hover {
@@ -353,10 +424,10 @@ a {
 
 .idea__saved {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--ease-slow);
 }
 
 .idea__saved.is-visible {
@@ -396,7 +467,7 @@ a {
   align-items: baseline;
   gap: 10px;
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -404,11 +475,11 @@ a {
 }
 
 .field__hint {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
-  color: #6e777f;
+  color: var(--faint);
 }
 
 .panel {
@@ -420,7 +491,7 @@ a {
 
 .panel__title {
   margin: 0 0 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -441,7 +512,7 @@ a {
 }
 
 .row__label {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -449,7 +520,7 @@ a {
 .row__value {
   min-width: 0;
   text-align: right;
-  font-size: 14px;
+  font-size: var(--text-ui);
 }
 
 .row__value .select {
@@ -458,15 +529,15 @@ a {
 
 .idea__meta,
 .idea__score {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--text-dim);
 }
 
 .hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
-  color: #6e777f;
+  color: var(--faint);
 }
 
 /* --- Édition en place --------------------------------------------------- */
@@ -488,15 +559,15 @@ a {
 
 .editable--display {
   cursor: text;
-  transition: background 0.1s ease;
+  transition: background var(--ease);
 }
 
 .editable--display:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--hover-veil);
 }
 
 .editable--display.is-empty {
-  color: #5d666e;
+  color: var(--faint);
   font-style: italic;
 }
 
@@ -512,33 +583,40 @@ a {
 }
 
 .idea__title {
-  font-size: 28px;
+  font-size: var(--text-display);
   font-weight: 600;
   line-height: 1.25;
 }
 
 .idea__tagline {
-  font-size: 16px;
+  font-size: var(--text-lg);
   color: var(--text-dim);
   margin-top: 2px;
 }
 
 .idea__prose {
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.65;
   color: var(--text-dim);
 }
 
+/* Point 6 du lot 2 : « 12,90 € » passait sur deux lignes, `.editable` portant
+   `overflow-wrap: anywhere`. Un prix ne se coupe pas. */
+.idea__price--nowrap {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 .idea__slug,
 .idea__price {
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: right;
   color: var(--text-dim);
 }
 
 .idea__slug {
-  font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 /* --- Verdicts ----------------------------------------------------------- */
@@ -573,11 +651,11 @@ a {
   background: var(--panel-2);
   color: var(--text-dim);
   cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+  transition: border-color var(--ease), color var(--ease), background var(--ease);
 }
 
 .chip:hover {
-  border-color: #3a424a;
+  border-color: var(--line-strong);
 }
 
 .chip.is-active {
@@ -635,7 +713,7 @@ a {
 
 .verdict.is-current .verdict__score {
   color: var(--accent);
-  border-color: rgba(224, 122, 60, 0.4);
+  border-color: var(--accent-line);
   background: var(--accent-soft);
 }
 
@@ -647,16 +725,16 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
 .verdict__current {
   padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(224, 122, 60, 0.4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
   color: var(--accent);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -677,12 +755,12 @@ a {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: var(--text-ui);
 }
 
 .notice--error {
-  border-color: rgba(212, 103, 92, 0.45);
-  color: #eab3ad;
+  border-color: var(--danger-line);
+  color: var(--danger-text);
 }
 
 /* --- Mobile ------------------------------------------------------------- */
@@ -721,7 +799,7 @@ a {
   }
 
   .idea__title {
-    font-size: 22px;
+    font-size: var(--text-xl);
   }
 
   .page__header {
@@ -764,7 +842,7 @@ a {
 
 /* Capsule en tête de la page idée : même ratio que sur la carte. */
 .idea__capsule {
-  aspect-ratio: 460 / 215;
+  aspect-ratio: var(--capsule-ratio);
   max-width: 460px;
   margin-bottom: 16px;
   border: 1px solid var(--line-soft);
@@ -796,11 +874,11 @@ a {
   border: 1px dashed var(--line);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color var(--ease), background var(--ease);
 }
 
 .dropzone:hover {
-  border-color: #3a424a;
+  border-color: var(--line-strong);
 }
 
 .dropzone.is-active {
@@ -809,13 +887,13 @@ a {
 }
 
 .dropzone__title {
-  font-size: 14px;
+  font-size: var(--text-ui);
   color: var(--text-dim);
 }
 
 .dropzone__hint {
-  font-size: 12px;
-  color: #6e777f;
+  font-size: var(--text-sm);
+  color: var(--faint);
 }
 
 .link-field {
@@ -853,7 +931,7 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--text-dim);
 }
 
@@ -869,7 +947,7 @@ a {
 .upload__bar {
   flex: 1;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
   overflow: hidden;
@@ -884,8 +962,8 @@ a {
 
 .upload__error {
   flex: 1;
-  color: #eab3ad;
-  font-size: 12px;
+  color: var(--danger-text);
+  font-size: var(--text-sm);
 }
 
 /* --- Liste des pièces jointes -------------------------------------------- */
@@ -919,7 +997,7 @@ a {
   display: flex;
   align-items: center;
   padding: 6px 2px;
-  color: #4d565d;
+  color: var(--faint-2);
   cursor: grab;
 }
 
@@ -961,14 +1039,14 @@ a {
 
 .attachment--link .attachment__icon {
   color: var(--accent);
-  border-color: rgba(224, 122, 60, 0.32);
+  border-color: var(--accent-line-soft);
 }
 
 /* Vignette au format capsule : on voit tout de suite ce que donnerait l'image. */
 .attachment__thumb {
   flex-shrink: 0;
   width: 92px;
-  aspect-ratio: 460 / 215;
+  aspect-ratio: var(--capsule-ratio);
   padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -997,24 +1075,24 @@ a {
 }
 
 .attachment__label {
-  font-size: 14px;
+  font-size: var(--text-ui);
   overflow-wrap: anywhere;
 }
 
 .attachment__flag {
   flex-shrink: 0;
   padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(224, 122, 60, 0.4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
   color: var(--accent);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .attachment__meta {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -1037,10 +1115,10 @@ a {
   border-radius: var(--radius);
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  transition: color var(--ease), border-color var(--ease);
 }
 
 .attachment__action:hover {
@@ -1050,7 +1128,7 @@ a {
 
 .attachment__action.is-active {
   color: var(--accent);
-  border-color: rgba(224, 122, 60, 0.4);
+  border-color: var(--accent-line);
 }
 
 .attachment__action--danger:hover {
@@ -1067,7 +1145,7 @@ a {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: var(--text-ui);
   overflow-wrap: anywhere;
 }
 
@@ -1093,12 +1171,12 @@ a {
 }
 
 .markdown h2 {
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 .markdown h3,
 .markdown h4 {
-  font-size: 14px;
+  font-size: var(--text-ui);
 }
 
 .markdown a {
@@ -1110,7 +1188,7 @@ a {
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
-  font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -1167,7 +1245,7 @@ a {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: rgba(8, 9, 11, 0.92);
+  background: var(--scrim-strong);
 }
 
 .lightbox__figure {
@@ -1192,7 +1270,7 @@ a {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--text-dim);
 }
 
@@ -1216,7 +1294,7 @@ a {
   right: 16px;
   width: 36px;
   height: 36px;
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 
 .lightbox__nav {
@@ -1224,7 +1302,7 @@ a {
   transform: translateY(-50%);
   width: 40px;
   height: 56px;
-  font-size: 26px;
+  font-size: var(--text-2xl);
   line-height: 1;
 }
 
@@ -1239,11 +1317,600 @@ a {
 .lightbox__close:hover,
 .lightbox__nav:hover {
   color: var(--text);
-  border-color: #3a424a;
+  border-color: var(--line-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+}
+
+/* --- États vides --------------------------------------------------------- */
+
+/* Un catalogue vide, une recherche sans résultat, une corbeille propre : trois
+   moments où l'application n'a rien à montrer. Elle dit quoi faire au lieu de
+   laisser un blanc. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-5);
+  margin-bottom: var(--gap);
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.empty__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.empty__text {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: var(--text-ui);
+}
+
+/* --- Corbeille ----------------------------------------------------------- */
+
+.trash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+}
+
+.trash-item__capsule {
+  flex-shrink: 0;
+  width: 92px;
+  aspect-ratio: var(--capsule-ratio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--capsule-bg);
+  color: var(--capsule-initial);
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.trash-item__capsule img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* L'idée est en corbeille : sa capsule aussi doit avoir l'air éteinte. */
+  opacity: 0.6;
+}
+
+.trash-item__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.trash-item__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-item__meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.trash-item__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Vider la corbeille est la seule action pleine et rouge de l'application :
+   c'est aussi la seule qui détruise plusieurs choses d'un coup. */
+.button--danger {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger-text);
+}
+
+.button--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
+/* --- Vue Steam ----------------------------------------------------------- */
+
+.page--steam {
+  max-width: 1080px;
+}
+
+/* La bannière dit ce qu'est cette page avant qu'on la lise comme une vraie
+   fiche de magasin. Discrète, mais jamais absente. */
+.steam__banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line-soft);
+  border-radius: var(--radius);
+}
+
+.steam__banner-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  flex-shrink: 0;
+}
+
+.steam__banner-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--text-md);
+}
+
+.steam__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.steam__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 34%;
+  padding: 6px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  transition: border-color var(--ease), color var(--ease);
+}
+
+.steam__nav-link:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+/* Le bout de liste reste un bloc : la barre garde sa forme d'une fiche à
+   l'autre, sinon les deux autres éléments sautent au dernier titre. */
+.steam__nav-link.is-disabled {
+  color: var(--faint-2);
+  border-color: transparent;
+  cursor: default;
+}
+
+.steam__nav-link--next {
+  margin-left: auto;
+}
+
+.steam__nav-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.steam__nav-back {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.steam__nav-back:hover {
+  color: var(--text);
+}
+
+.steam__title {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-display);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
+
+.steam__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-7);
+  align-items: start;
+}
+
+.steam__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* Capsule et bande-annonce côte à côte : c'est la zone média d'une fiche. */
+.steam__media {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.steam__capsule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: var(--capsule-ratio);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--capsule-bg);
+}
+
+.steam__capsule img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Une fiche sans capsule occupe la même place qu'une fiche avec : sans ça, on
+   ne compare plus deux pages, on compare deux mises en page. */
+.steam__capsule-empty {
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--capsule-initial);
+  user-select: none;
+}
+
+.steam__trailer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.steam__trailer-title {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--accent);
+}
+
+.steam__trailer-text {
+  margin: 0;
+  flex: 1;
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  line-height: var(--leading-prose);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.steam__trailer-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.steam__section-title {
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+.steam__lede {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.steam__pitch {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: var(--leading-prose);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+/* Un champ vide se voit : c'est le but de cette vue. */
+.steam__lede.is-empty,
+.steam__pitch.is-empty,
+.steam__trailer-text.is-empty,
+.steam__similar-text.is-empty {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.steam__shot-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-3);
+}
+
+.steam__shot {
+  display: block;
+  width: 100%;
+  padding: 0;
+  aspect-ratio: var(--shot-ratio);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--capsule-bg);
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+
+.steam__shot:hover {
+  border-color: var(--accent-line);
+}
+
+.steam__shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.steam__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.steam__buy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.steam__buy-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.steam__price {
+  color: var(--accent);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  /* Point 6 du lot 2, encore : un prix tient sur une ligne. */
+  white-space: nowrap;
+}
+
+.steam__panel {
+  padding: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.steam__panel-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+.steam__panel-empty {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-md);
+  font-style: italic;
+}
+
+.steam__review-score {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.steam__review-max {
+  color: var(--muted);
+  font-size: var(--text-md);
+  font-weight: 400;
+}
+
+.steam__review-note {
+  margin: var(--space-2) 0 0;
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.steam__review-date {
+  margin: var(--space-2) 0 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.steam__fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.steam__fact:first-of-type {
+  border-top: none;
+}
+
+.steam__fact-label {
+  color: var(--muted);
+  font-size: var(--text-md);
+  flex-shrink: 0;
+}
+
+.steam__fact-value {
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  text-align: right;
+}
+
+.steam__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+.steam__similar {
+  margin-top: var(--space-7);
+}
+
+.steam__similar-text {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--text-ui);
+  line-height: var(--leading-prose);
+  white-space: pre-wrap;
+}
+
+/* --- Responsive : la passe unique ---------------------------------------- */
+
+/* Tablette : la colonne de droite passe sous le contenu, page idée comme vue
+   Steam. Elle n'est pas plus large, elle est ailleurs. */
+@media (max-width: 900px) {
+  .steam__layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+
+  .steam__media {
+    grid-template-columns: 1fr;
+  }
+
+  .steam__aside {
+    /* Trois blocs côte à côte tant qu'il y a la place, plutôt qu'empilés. */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 600px) {
+  /* Catalogue en deux colonnes : c'est encore une grille de capsules, pas une
+     liste. Le point de bascule est la lisibilité du titre, pas la mode. */
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .card__body {
+    padding: var(--space-3);
+  }
+
+  .card__title {
+    font-size: var(--text-ui);
+  }
+
+  .card__tagline {
+    font-size: var(--text-sm);
+  }
+
+  .page__actions {
+    width: 100%;
+  }
+
+  .page__actions .button {
+    flex: 1;
+    text-align: center;
+  }
+
+  .steam__title {
+    font-size: var(--text-xl);
+  }
+
+  .steam__banner {
+    flex-wrap: wrap;
+  }
+
+  .steam__banner .button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .steam__nav-link {
+    max-width: 40%;
+  }
+
+  /* Le nom de l'idée voisine saute : les flèches suffisent à enchaîner. */
+  .steam__nav-name {
+    display: none;
+  }
+
+  .steam__shot-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* La corbeille passe en liste : capsule, titre, puis les actions dessous. */
+  .trash-item {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .trash-item__capsule {
+    width: 72px;
+  }
+
+  .trash-item__actions {
+    width: 100%;
+  }
+
+  .trash-item__actions .button {
+    flex: 1;
+    text-align: center;
+    font-size: var(--text-md);
   }
 }

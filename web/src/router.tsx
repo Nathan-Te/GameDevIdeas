@@ -17,10 +17,28 @@ export function navigate(to: string, { replace = false } = {}): void {
 }
 
 export function usePathname(): string {
-  const [pathname, setPathname] = useState(() => window.location.pathname);
+  return useLocation().pathname;
+}
+
+/**
+ * Chemin **et** query : la vue Steam enchaîne les idées en respectant les
+ * filtres du catalogue, qui voyagent dans l'URL. Le catalogue, lui, écrit ses
+ * filtres par `replaceState` sans repasser par `navigate` — il tient déjà son
+ * propre état, et une resynchronisation ici le ferait clignoter.
+ */
+export function useLocation(): { pathname: string; search: string } {
+  const [location, setLocation] = useState(() => ({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  }));
 
   useEffect(() => {
-    const sync = () => setPathname(window.location.pathname);
+    const sync = () =>
+      setLocation((current) =>
+        current.pathname === window.location.pathname && current.search === window.location.search
+          ? current
+          : { pathname: window.location.pathname, search: window.location.search },
+      );
     window.addEventListener('popstate', sync);
     window.addEventListener(NAVIGATION_EVENT, sync);
     return () => {
@@ -29,7 +47,7 @@ export function usePathname(): string {
     };
   }, []);
 
-  return pathname;
+  return location;
 }
 
 interface LinkProps {
@@ -37,10 +55,11 @@ interface LinkProps {
   className?: string;
   children: ReactNode;
   title?: string;
+  'aria-label'?: string;
 }
 
 /** Un vrai `<a>` : clic milieu, Ctrl+clic et « ouvrir dans un onglet » marchent. */
-export function Link({ to, className, children, title }: LinkProps) {
+export function Link({ to, className, children, title, ...rest }: LinkProps) {
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -49,7 +68,7 @@ export function Link({ to, className, children, title }: LinkProps) {
   }
 
   return (
-    <a href={to} className={className} title={title} onClick={onClick}>
+    <a href={to} className={className} title={title} onClick={onClick} {...rest}>
       {children}
     </a>
   );
