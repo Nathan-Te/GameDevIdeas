@@ -2,52 +2,69 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  FAMILY_FEATURES,
   isRecommended,
   RELEASE_KIND,
   releaseDate,
   reviewSummary,
+  SEED_FAMILIES,
   shortDescription,
   similarTitles,
   storeFeatures,
   storeGenre,
-  STORE_TAGS,
   storePrice,
   storeTags,
 } from '../../shared/store-model.js';
-import { FAMILIES, STATUSES } from '../src/schemas.js';
+import { STATUSES } from '../src/schemas.js';
 
 /**
  * Le modèle store est du JavaScript pur partagé avec le front : il se teste
- * ici, sans monter de page. Ces tests couvrent la table de traduction des
- * familles, la dérivation de la date de parution et celle du libellé
- * d'évaluation — les trois endroits où la vue invente à partir des champs.
+ * ici, sans monter de page. Ces tests couvrent la lecture de la famille, la
+ * dérivation de la date de parution et celle du libellé d'évaluation — les
+ * trois endroits où la vue invente à partir des champs.
+ *
+ * Depuis le lot 4, les étiquettes et les fonctionnalités ne sont plus une table
+ * codée en dur mais des colonnes de la famille : le modèle reçoit la ligne de
+ * `families` telle que l'API la sert, et `SEED_FAMILIES` n'est plus qu'un
+ * peuplement initial.
  */
 
-test('chaque famille du seed a au moins deux étiquettes de magasin', () => {
-  for (const family of FAMILIES) {
+test('les étiquettes et le genre sont lus sur la famille fournie', () => {
+  const family = { store_tags: ['Tir', 'Action', 'Coop'], features: [] };
+
+  assert.deepEqual(storeTags(family), ['Tir', 'Action', 'Coop']);
+  assert.equal(storeGenre(family), 'Tir, Action');
+});
+
+test('une famille absente ou sans étiquette retombe sur un repli plutôt que sur du vide', () => {
+  for (const family of [null, undefined, {}, { store_tags: [] }, { store_tags: 'Action' }]) {
     const tags = storeTags(family);
-    assert.ok(
-      Array.isArray(tags) && tags.length >= 2,
-      `la famille « ${family} » doit avoir au moins deux étiquettes`,
-    );
-    assert.ok(
-      tags.every((tag) => typeof tag === 'string' && tag.trim().length > 0),
-      `la famille « ${family} » a une étiquette vide`,
-    );
-    assert.equal(new Set(tags).size, tags.length, `« ${family} » répète une étiquette`);
+    assert.ok(Array.isArray(tags) && tags.length >= 2, `repli manquant pour ${JSON.stringify(family)}`);
   }
 });
 
-test('la table des étiquettes ne couvre que les familles du seed', () => {
-  assert.deepEqual(Object.keys(STORE_TAGS).sort(), [...FAMILIES].sort());
+test('chaque famille du seed a au moins deux étiquettes de magasin', () => {
+  for (const family of SEED_FAMILIES) {
+    const tags = storeTags(family);
+    assert.ok(tags.length >= 2, `la famille « ${family.slug} » doit avoir au moins deux étiquettes`);
+    assert.ok(
+      tags.every((tag) => typeof tag === 'string' && tag.trim().length > 0),
+      `la famille « ${family.slug} » a une étiquette vide`,
+    );
+    assert.equal(new Set(tags).size, tags.length, `« ${family.slug} » répète une étiquette`);
+  }
 });
 
-test('une famille inconnue retombe sur des étiquettes plutôt que sur du vide', () => {
-  assert.ok(storeTags('famille-jamais-vue').length >= 2);
-});
+test('le seed n’emploie que des fonctionnalités connues, et un slug unique par famille', () => {
+  const slugs = SEED_FAMILIES.map((family) => family.slug);
+  assert.equal(new Set(slugs).size, slugs.length, 'un slug de famille est répété dans le seed');
 
-test('le genre est la paire de tête des étiquettes', () => {
-  assert.equal(storeGenre('fps'), 'FPS, Action');
+  for (const family of SEED_FAMILIES) {
+    assert.ok(family.label.trim(), `la famille « ${family.slug} » n’a pas de libellé`);
+    for (const feature of family.features) {
+      assert.ok(FAMILY_FEATURES.includes(feature), `fonctionnalité inconnue : ${feature}`);
+    }
+  }
 });
 
 test('chaque statut du seed a une date de parution', () => {
@@ -110,17 +127,26 @@ test('un avis est recommandé à partir de 3 sur 5', () => {
   assert.equal(isRecommended(null), false);
 });
 
-test('les fonctionnalités mentionnent toujours la manette', () => {
-  for (const family of FAMILIES) {
-    assert.ok(storeFeatures(family).includes('manette'), `« ${family} » perd le support manette`);
+test('les fonctionnalités mentionnent toujours la manette, même sans famille', () => {
+  for (const family of [...SEED_FAMILIES, null, {}, { features: [] }]) {
+    assert.ok(storeFeatures(family).includes('manette'), 'le support manette a disparu');
   }
 });
 
-test('les familles sociales listent la coop, les autres le solo', () => {
-  assert.deepEqual(storeFeatures('friendslop'), ['coop', 'multi', 'manette']);
-  assert.deepEqual(storeFeatures('party'), ['coop', 'multi', 'manette']);
-  assert.deepEqual(storeFeatures('dopamine-solo'), ['solo', 'manette']);
-  assert.deepEqual(storeFeatures('inspection'), ['solo', 'manette']);
+test('les fonctionnalités sont celles de la famille, dans son ordre', () => {
+  assert.deepEqual(storeFeatures({ features: ['coop-online', 'multiplayer'] }), [
+    'coop-online',
+    'multiplayer',
+    'manette',
+  ]);
+  assert.deepEqual(storeFeatures({ features: ['solo'] }), ['solo', 'manette']);
+  assert.deepEqual(storeFeatures({ features: ['local-coop'] }), ['local-coop', 'manette']);
+});
+
+test('une fonctionnalité inconnue posée en base est ignorée, pas affichée', () => {
+  // La colonne est du JSON : une valeur d'un ancien schéma ne doit pas se
+  // retrouver dans la colonne de droite de la vue store sous forme de « undefined ».
+  assert.deepEqual(storeFeatures({ features: ['solo', 'vr', 'coop'] }), ['solo', 'manette']);
 });
 
 test('le prix absent ou nul s’affiche « Gratuit »', () => {

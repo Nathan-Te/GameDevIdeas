@@ -32,6 +32,13 @@ export const config = {
   maxUploadMb: Number(env.MAX_UPLOAD_MB || 50),
 
   /**
+   * Limite propre à la bande-annonce, en mégaoctets. Une vidéo de vingt
+   * secondes pèse plus qu'une capture, et refuser une bande-annonce parce
+   * qu'elle dépasse la limite d'une image n'aurait aucun sens.
+   */
+  maxTrailerMb: Number(env.MAX_TRAILER_MB || 100),
+
+  /**
    * Aller chercher le titre de la page pour libeller un lien collé sans label.
    * Le serveur appelle alors le domaine collé par Nathan : on peut couper cet
    * appel sortant (instance sans accès Internet, ou par principe). Le libellé

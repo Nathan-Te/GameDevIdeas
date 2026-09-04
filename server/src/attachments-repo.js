@@ -170,9 +170,9 @@ export function reorderAttachments(db, ideaId, ids) {
  * après — jamais avant : une ligne qui pointe sur un fichier absent est un bug
  * visible, un fichier orphelin ne l'est pas.
  *
- * `ideas.capsule_file_id` est remis à `null` par la clé étrangère
- * (`ON DELETE SET NULL` dans `001-init.sql`) ; les clés étrangères sont actives
- * sur toutes les connexions ouvertes par `db.js`.
+ * `ideas.capsule_file_id` et `ideas.trailer_file_id` sont remis à `null` par
+ * leur clé étrangère (`ON DELETE SET NULL`, `001-init.sql` et `005-trailer.sql`) ;
+ * les clés étrangères sont actives sur toutes les connexions ouvertes par `db.js`.
  */
 export function deleteAttachment(db, id) {
   const existing = getAttachmentOrFail(db, id);
@@ -185,13 +185,32 @@ export function deleteAttachment(db, id) {
  * afficherait la capsule du voisin, un markdown n'a rien à afficher.
  */
 export function assertUsableAsCapsule(db, ideaId, attachmentId) {
+  return assertUsableAs(db, ideaId, attachmentId, 'image', 'La capsule doit être une image.');
+}
+
+/**
+ * La bande-annonce doit être une pièce `trailer` de cette idée — un GIF ou une
+ * courte vidéo. Une capture n'est pas une bande-annonce, et la visionneuse de
+ * la vue store la jouerait en boucle sans jamais rien montrer.
+ */
+export function assertUsableAsTrailer(db, ideaId, attachmentId) {
+  return assertUsableAs(
+    db,
+    ideaId,
+    attachmentId,
+    'trailer',
+    'La bande-annonce doit être un GIF ou une vidéo (.gif, .mp4, .webm).',
+  );
+}
+
+function assertUsableAs(db, ideaId, attachmentId, kind, message) {
   const attachment = findAttachment(db, attachmentId);
 
   if (!attachment || attachment.idea_id !== ideaId) {
     throw badRequest(`La pièce jointe n° ${attachmentId} n'appartient pas à cette idée.`);
   }
-  if (attachment.kind !== 'image') {
-    throw badRequest('La capsule doit être une image.');
+  if (attachment.kind !== kind) {
+    throw badRequest(message);
   }
 
   return attachment;

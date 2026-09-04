@@ -4,18 +4,6 @@
  * sans étape de compilation, et le front est en TypeScript strict.
  */
 
-export type StoreFamily =
-  | 'friendslop'
-  | 'dopamine-solo'
-  | 'sim-fantasme'
-  | 'inspection'
-  | 'tactique'
-  | 'party'
-  | 'coop-2'
-  | 'fps'
-  | 'educatif'
-  | 'autre';
-
 export type StoreStatus =
   | 'idee'
   | 'reserve'
@@ -26,22 +14,44 @@ export type StoreStatus =
   | 'publie';
 
 export type ReviewTone = 'positive' | 'mixed' | 'negative' | 'none';
-export type StoreFeature = 'coop' | 'multi' | 'solo' | 'manette';
+
+/** Une fonctionnalité éditable sur une famille. `manette` n'en est pas une. */
+export type FamilyFeature = 'solo' | 'coop-online' | 'multiplayer' | 'local-coop';
+export type StoreFeature = FamilyFeature | 'manette';
+
 export type ReleaseKind = 'a-venir' | 'acces-anticipe' | 'date';
 
-export declare const STORE_TAGS: Record<StoreFamily, string[]>;
+/**
+ * Ce que le modèle store attend d'une famille : sa ligne de la table
+ * `families`, telle que `GET /api/families` la sert. `null` quand une idée
+ * pointe une famille qui n'existe plus.
+ */
+export interface StoreFamilyInput {
+  store_tags?: string[];
+  features?: string[];
+}
+
+export interface SeedFamily {
+  slug: string;
+  label: string;
+  store_tags: string[];
+  features: FamilyFeature[];
+}
+
+export declare const SEED_FAMILIES: SeedFamily[];
+export declare const FAMILY_FEATURES: FamilyFeature[];
 export declare const RELEASE_KIND: Record<StoreStatus, ReleaseKind>;
 export declare const FEATURE_LABELS: Record<StoreFeature, string>;
 
-export declare function storeTags(family: string): string[];
-export declare function storeGenre(family: string): string;
+export declare function storeTags(family: StoreFamilyInput | null | undefined): string[];
+export declare function storeGenre(family: StoreFamilyInput | null | undefined): string;
+export declare function storeFeatures(family: StoreFamilyInput | null | undefined): StoreFeature[];
 export declare function releaseDate(status: string, updatedAt?: string): string;
 export declare function reviewSummary(score: number | null | undefined): {
   label: string;
   tone: ReviewTone;
 };
 export declare function isRecommended(score: number | null | undefined): boolean;
-export declare function storeFeatures(family: string): StoreFeature[];
 export declare function storePrice(cents: number | null | undefined): string;
 export declare function similarTitles(competition: string | null | undefined): string[];
 export declare function shortDescription(

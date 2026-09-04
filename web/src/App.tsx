@@ -1,11 +1,12 @@
 import { Catalogue } from './pages/Catalogue';
+import { Families } from './pages/Families';
 import { IdeaPage } from './pages/IdeaPage';
 import { SteamPage } from './pages/SteamPage';
 import { Trash } from './pages/Trash';
 import { Link, useLocation } from './router';
 
 /**
- * Les quatre vues du seed. L'ordre des tests compte : `/idees/:slug/steam` est
+ * Les vues de Vitrine. L'ordre des tests compte : `/idees/:slug/steam` est
  * examiné avant `/idees/:slug`, sinon le slug avalerait le suffixe.
  */
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
 
   if (pathname === '/' || pathname === '') return <Catalogue />;
   if (pathname === '/corbeille' || pathname === '/corbeille/') return <Trash />;
+  if (pathname === '/familles' || pathname === '/familles/') return <Families />;
 
   const steam = /^\/idees\/([^/]+)\/steam\/?$/.exec(pathname);
   if (steam) return <SteamPage slug={decodeURIComponent(steam[1])} search={search} />;

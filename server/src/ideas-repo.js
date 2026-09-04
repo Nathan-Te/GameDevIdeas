@@ -1,5 +1,6 @@
-import { assertUsableAsCapsule } from './attachments-repo.js';
+import { assertUsableAsCapsule, assertUsableAsTrailer } from './attachments-repo.js';
 import { notFound } from './errors.js';
+import { assertFamilyExists } from './families-repo.js';
 import { fileUrl } from './files.js';
 import { isDerivedFrom, uniqueSlug } from './slug.js';
 
@@ -30,6 +31,12 @@ const CURRENT_VERDICT_JOIN = `
  */
 const CAPSULE_JOIN = 'LEFT JOIN attachments c ON c.id = i.capsule_file_id';
 
+/**
+ * Même raison pour la bande-annonce : le catalogue la joue au survol des
+ * cartes, donc il lui faut son adresse dans la même requête que la capsule.
+ */
+const TRAILER_JOIN = 'LEFT JOIN attachments t ON t.id = i.trailer_file_id';
+
 const SELECT_IDEA = `
   SELECT i.*,
          v.id         AS verdict_id,
@@ -37,10 +44,12 @@ const SELECT_IDEA = `
          v.note       AS verdict_note,
          v.created_at AS verdict_created_at,
          c.path       AS capsule_path,
+         t.path       AS trailer_path,
          (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count
   FROM ideas i
   ${CURRENT_VERDICT_JOIN}
   ${CAPSULE_JOIN}
+  ${TRAILER_JOIN}
 `;
 
 /** Sépare la ligne SQL plate en idée + verdict courant imbriqué. */
@@ -58,6 +67,7 @@ export function serializeIdea(row) {
     status: row.status,
     competition: row.competition,
     capsule_file_id: row.capsule_file_id,
+    trailer_file_id: row.trailer_file_id ?? null,
     /**
      * Date de mise en liste de souhaits, `null` sinon. Servie partout où une
      * idée est servie : le catalogue marque ses cartes, la vue store dessine
@@ -66,6 +76,11 @@ export function serializeIdea(row) {
     wishlisted_at: row.wishlisted_at ?? null,
     /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
     capsule_url: fileUrl(row.capsule_path),
+    /**
+     * Adresse de la bande-annonce. Servie partout où une idée l'est : le
+     * catalogue la joue au survol, la vue store en tête de visionneuse.
+     */
+    trailer_url: fileUrl(row.trailer_path),
     /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
     attachment_count: row.attachment_count ?? 0,
     created_at: row.created_at,
@@ -142,7 +157,18 @@ export function getIdeaBySlugOrFail(db, slug, options) {
 }
 
 export function createIdea(db, input = {}) {
+  if (input.family !== undefined) assertFamilyExists(db, input.family);
+
   const title = input.title ?? DEFAULT_TITLE;
+  /**
+   * Sans famille demandée : « autre », tant qu'elle existe. Elle peut avoir été
+   * renommée ou supprimée depuis `/familles` — on retombe alors sur la première
+   * de la liste, parce qu'une idée créée avec une famille inexistante n'aurait
+   * ni étiquettes ni fonctionnalités.
+   */
+  const defaultFamily = db
+    .prepare("SELECT slug FROM families ORDER BY slug <> 'autre', position, id LIMIT 1")
+    .get();
   const slug = uniqueSlug(db, input.slug || title);
   const timestamp = now();
 
@@ -153,7 +179,7 @@ export function createIdea(db, input = {}) {
     pitch: input.pitch ?? '',
     gif: input.gif ?? '',
     price_cents: input.price_cents ?? null,
-    family: input.family ?? 'autre',
+    family: input.family ?? defaultFamily?.slug ?? 'autre',
     status: input.status ?? 'idee',
     competition: input.competition ?? '',
     created_at: timestamp,
@@ -189,6 +215,8 @@ export function updateIdea(db, slug, patch = {}) {
   const sets = [];
   const params = { id: existing.id };
 
+  if (Object.hasOwn(patch, 'family')) assertFamilyExists(db, patch.family);
+
   for (const field of WRITABLE) {
     if (Object.hasOwn(patch, field)) {
       sets.push(`${field} = @${field}`);
@@ -213,6 +241,14 @@ export function updateIdea(db, slug, patch = {}) {
     }
     sets.push('capsule_file_id = @capsule_file_id');
     params.capsule_file_id = patch.capsule_file_id;
+  }
+
+  if (Object.hasOwn(patch, 'trailer_file_id')) {
+    if (patch.trailer_file_id !== null) {
+      assertUsableAsTrailer(db, existing.id, patch.trailer_file_id);
+    }
+    sets.push('trailer_file_id = @trailer_file_id');
+    params.trailer_file_id = patch.trailer_file_id;
   }
 
   const renamingTitle = Object.hasOwn(patch, 'title') && patch.title !== existing.title;
@@ -298,8 +334,10 @@ export function purgeIdea(db, slug) {
 
   db.transaction(() => {
     db.prepare('DELETE FROM verdicts WHERE idea_id = ?').run(existing.id);
-    // La capsule pointe sur une pièce jointe : on lâche la référence d'abord.
-    db.prepare('UPDATE ideas SET capsule_file_id = NULL WHERE id = ?').run(existing.id);
+    // Capsule et bande-annonce pointent sur une pièce jointe : on lâche les
+    // références d'abord.
+    db.prepare('UPDATE ideas SET capsule_file_id = NULL, trailer_file_id = NULL WHERE id = ?')
+      .run(existing.id);
     db.prepare('DELETE FROM attachments WHERE idea_id = ?').run(existing.id);
     db.prepare('DELETE FROM ideas WHERE id = ?').run(existing.id);
   })();

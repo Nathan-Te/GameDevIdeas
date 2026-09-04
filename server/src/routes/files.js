@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
 import { notFound } from '../errors.js';
-import { contentTypeFor, resolveInsideFiles } from '../files.js';
+import { contentTypeFor, isSeekable, parseRange, resolveInsideFiles } from '../files.js';
 
 /**
  * Sert `data/files/`.
@@ -15,6 +15,11 @@ import { contentTypeFor, resolveInsideFiles } from '../files.js';
  *
  * Les noms stockés contiennent un UUID, donc un chemin ne désigne jamais deux
  * contenus différents : le cache navigateur peut être long et immuable.
+ *
+ * Depuis le lot 4, la route sait répondre par morceaux (`Range`). Sans ça une
+ * bande-annonce `.mp4` ne se lit pas : le navigateur demande les premiers
+ * octets pour lire l'entête du conteneur, reçoit le fichier entier en 200, et
+ * beaucoup de lecteurs abandonnent — ou refusent de se déplacer dans le flux.
  */
 const CACHE = 'public, max-age=31536000, immutable';
 
@@ -45,6 +50,7 @@ export default async function fileRoutes(app) {
     if (!info.isFile()) throw notFound('Fichier introuvable.');
 
     const { type, inline } = contentTypeFor(absolute);
+    const seekable = inline && isSeekable(absolute);
 
     reply
       .header('Cache-Control', CACHE)
@@ -55,9 +61,33 @@ export default async function fileRoutes(app) {
         'Content-Disposition',
         `${inline ? 'inline' : 'attachment'}; filename="${basename(absolute).replace(/"/g, '')}"`,
       )
-      .header('Content-Length', info.size)
+      // Annoncé seulement là où c'est vrai : promettre les plages sur un `.zip`
+      // qu'on sert d'un bloc ferait mentir l'en-tête.
+      .header('Accept-Ranges', seekable ? 'bytes' : 'none')
       .type(type);
 
+    const range = seekable ? parseRange(request.headers.range, info.size) : null;
+
+    if (range?.unsatisfiable) {
+      // 416 : la plage demandée est hors du fichier. `Content-Range: bytes */n`
+      // dit au lecteur quelle est la vraie taille, pour qu'il retente juste.
+      return reply
+        .code(416)
+        .header('Content-Range', `bytes */${info.size}`)
+        .header('Content-Length', 0)
+        .send();
+    }
+
+    if (range) {
+      const length = range.end - range.start + 1;
+      return reply
+        .code(206)
+        .header('Content-Range', `bytes ${range.start}-${range.end}/${info.size}`)
+        .header('Content-Length', length)
+        .send(createReadStream(absolute, { start: range.start, end: range.end }));
+    }
+
+    reply.header('Content-Length', info.size);
     return reply.send(createReadStream(absolute));
   });
 }

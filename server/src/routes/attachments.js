@@ -29,15 +29,31 @@ const validateLink = compileBody(createLinkBody);
 /** Codes par lesquels `@fastify/multipart` signale un dépassement de taille. */
 const TOO_LARGE_CODES = new Set(['FST_REQ_FILE_TOO_LARGE', 'FST_PARTS_LIMIT']);
 
-const tooLarge = () =>
-  payloadTooLarge(`Fichier trop volumineux : la limite est de ${config.maxUploadMb} Mo.`);
+/**
+ * Deux limites, pas une : une bande-annonce de vingt secondes pèse plus qu'une
+ * capture, et refuser un `.mp4` parce qu'il dépasse la limite d'une image
+ * n'aurait aucun sens. `MAX_TRAILER_MB` vaut pour les `trailer`,
+ * `MAX_UPLOAD_MB` pour tout le reste.
+ */
+const limitMbFor = (kind) => (kind === 'trailer' ? config.maxTrailerMb : config.maxUploadMb);
+
+/**
+ * La limite déclarée à `@fastify/multipart` est la plus haute des deux : elle
+ * ne sait pas quel `kind` arrive avant d'avoir lu le nom du fichier. La limite
+ * fine est appliquée après écriture, à la taille réelle — le fichier refusé est
+ * effacé comme tous ceux de la requête.
+ */
+const hardLimitMb = () => Math.max(config.maxUploadMb, config.maxTrailerMb);
+
+const tooLarge = (limitMb = hardLimitMb()) =>
+  payloadTooLarge(`Fichier trop volumineux : la limite est de ${limitMb} Mo.`);
 
 export default async function attachmentRoutes(app) {
   const { db } = app;
 
   const multipart = (await import('@fastify/multipart')).default;
   await app.register(multipart, {
-    limits: { fileSize: Math.round(config.maxUploadMb * 1024 * 1024) },
+    limits: { fileSize: Math.round(hardLimitMb() * 1024 * 1024) },
   });
 
   app.get('/api/ideas/:slug/attachments', { schema: { params: ideaSlugParams } }, async (request) => {
@@ -81,8 +97,8 @@ export default async function attachmentRoutes(app) {
   /**
    * La ligne part d'abord, le fichier ensuite. Une ligne qui pointe sur un
    * fichier absent casse un affichage ; un fichier orphelin ne se voit pas.
-   * `ideas.capsule_file_id` revient à `null` par la clé étrangère
-   * (`ON DELETE SET NULL`, `001-init.sql`).
+   * `ideas.capsule_file_id` et `ideas.trailer_file_id` reviennent à `null` par
+   * leur clé étrangère (`ON DELETE SET NULL`, `001-init.sql` et `005`).
    */
   app.delete('/api/attachments/:id', { schema: { params: attachmentIdParams } }, async (request) => {
     const removed = deleteAttachment(db, request.params.id);
@@ -139,9 +155,13 @@ async function storeUploadedFiles(db, ideaId, request) {
 
       const { size } = await stat(absolute);
 
+      const kind = kindFromFile(part);
+      const limitMb = limitMbFor(kind);
+      if (size > limitMb * 1024 * 1024) throw tooLarge(limitMb);
+
       created.push(
         createAttachment(db, ideaId, {
-          kind: kindFromFile(part),
+          kind,
           label: part.filename ?? '',
           path: relative,
           size_bytes: size,

@@ -1,8 +1,8 @@
 import type { AttachmentKind, LinkType } from '../types';
 
 /**
- * Icônes tracées à la main plutôt qu'une police d'icônes : il en faut huit, et
- * une dépendance de plus pour huit tracés ne se justifierait pas. Elles suivent
+ * Icônes tracées à la main plutôt qu'une police d'icônes : il en faut neuf, et
+ * une dépendance de plus pour neuf tracés ne se justifierait pas. Elles suivent
  * la couleur du texte (`currentColor`) et la taille est fixée par le CSS.
  */
 
@@ -80,6 +80,14 @@ const PATHS: Record<LinkType | AttachmentKind, React.ReactNode> = {
     <>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
       <path d="M14 3v5h5" />
+    </>
+  ),
+  // Un clap : une bande-annonce. Elle a normalement son aperçu, mais une carte
+  // dont le fichier ne se charge pas doit quand même dire ce qu'elle est.
+  trailer: (
+    <>
+      <path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z" />
+      <path d="m3 8 2.5-4h13L21 8M8.5 4 6 8m7-4-2.5 4m7-4L15 8" />
     </>
   ),
   link: (

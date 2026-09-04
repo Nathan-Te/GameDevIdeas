@@ -1,6 +1,8 @@
 import type {
   Attachment,
   AttachmentPatch,
+  Family,
+  FamilyPatch,
   Idea,
   IdeaFilters,
   IdeaPatch,
@@ -104,6 +106,29 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ wishlisted }),
     });
+  },
+
+  // --- Familles -------------------------------------------------------------
+
+  async listFamilies(): Promise<Family[]> {
+    const { families } = await request<{ families: Family[] }>('/api/families');
+    return families;
+  },
+
+  createFamily(fields: FamilyPatch = {}): Promise<Family> {
+    return request<Family>('/api/families', { method: 'POST', body: JSON.stringify(fields) });
+  },
+
+  updateFamily(slug: string, patch: FamilyPatch): Promise<Family> {
+    return request<Family>(`/api/families/${encodeURIComponent(slug)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  },
+
+  /** Refusée en 409 tant qu'une idée porte la famille ; le message dit combien. */
+  deleteFamily(slug: string): Promise<Family> {
+    return request<Family>(`/api/families/${encodeURIComponent(slug)}`, { method: 'DELETE' });
   },
 
   /** Configuration du serveur : le nom affiché comme développeur et éditeur. */

@@ -15,10 +15,13 @@ import {
 } from '../../../shared/store-model.js';
 import { api, ApiError } from '../api';
 import { Lightbox } from '../components/Lightbox';
+import { PlayBadge, TrailerStage } from '../components/Trailer';
+import { findFamily, useFamilies } from '../families';
 import { filtersFromSearch, steamHref } from '../filters';
 import { Link } from '../router';
 import '../steam.css';
 import type { Attachment, Idea, Verdict } from '../types';
+import type { StoreFeature } from '../../../shared/store-model';
 
 /**
  * La vue « page store » — la raison d'être de l'application.
@@ -53,6 +56,7 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
   const [neighbours, setNeighbours] = useState<Idea[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
+  const { families } = useFamilies();
 
   const [slide, setSlide] = useState(0);
   const [stripOffset, setStripOffset] = useState(0);
@@ -182,7 +186,10 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
   const capsule = attachments.find((item) => item.id === idea.capsule_file_id) ?? null;
   const link = attachments.find((item) => item.kind === 'link' && item.url) ?? null;
 
-  const tags = storeTags(idea.family);
+  // Étiquettes et fonctionnalités ne viennent plus d'une table codée en dur :
+  // elles sont les colonnes de la famille, éditées sur `/familles`.
+  const family = findFamily(families, idea.family);
+  const tags = storeTags(family);
   const summary = reviewSummary(idea.current_verdict?.score ?? null);
   const parution = releaseDate(idea.status, idea.updated_at);
   const description = shortDescription(idea.tagline, idea.pitch);
@@ -286,13 +293,20 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
               <div className="sp-glance__left">
                 <div className="sp-stage">
                   {slide === 0 || !shots[slide - 1] ? (
-                    <div className="sp-trailer">
-                      <span className="sp-trailer__play" aria-hidden="true" />
-                      <p className={`sp-trailer__text ${idea.gif ? '' : 'is-empty'}`}>
-                        {idea.gif || 'Aucun moment clipable décrit.'}
-                      </p>
-                      <span className="sp-trailer__tag">Bande-annonce</span>
-                    </div>
+                    idea.trailer_url ? (
+                      // La bande-annonce joue, comme sur un magasin. Le champ
+                      // « GIF » passe alors sous le lecteur : il décrit ce qu'on
+                      // est en train de regarder, il ne le remplace plus.
+                      <TrailerStage url={idea.trailer_url} title={title} />
+                    ) : (
+                      <div className="sp-trailer">
+                        <span className="sp-trailer__play" aria-hidden="true" />
+                        <p className={`sp-trailer__text ${idea.gif ? '' : 'is-empty'}`}>
+                          {idea.gif || 'Aucun moment clipable décrit.'}
+                        </p>
+                        <span className="sp-trailer__tag">Bande-annonce</span>
+                      </div>
+                    )
                   ) : (
                     <button
                       type="button"
@@ -304,6 +318,10 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
                     </button>
                   )}
                 </div>
+
+                {slide === 0 && idea.trailer_url && idea.gif && (
+                  <p className="sp-stage__caption">{idea.gif}</p>
+                )}
 
                 <div className="sp-strip">
                   {/* Sans quoi défiler, pas de flèches : deux boutons morts sur
@@ -327,11 +345,16 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
                     >
                       <button
                         type="button"
-                        className={`sp-thumb ${slide === 0 ? 'is-active' : ''}`}
+                        className={`sp-thumb sp-thumb--trailer ${slide === 0 ? 'is-active' : ''}`}
                         onClick={() => showSlide(0)}
                         aria-label="Bande-annonce"
                       >
-                        <span className="sp-thumb__trailer" />
+                        {idea.trailer_url ? (
+                          <TrailerThumb url={idea.trailer_url} />
+                        ) : (
+                          <span className="sp-thumb__trailer" />
+                        )}
+                        <PlayBadge className="sp-thumb__play" />
                       </button>
 
                       {shots.map((shot, position) => (
@@ -511,7 +534,7 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
                   <h2 className="sp-block__header">Fonctionnalités</h2>
                   <div className="sp-block__body">
                     <ul className="sp-features">
-                      {storeFeatures(idea.family).map((feature) => (
+                      {storeFeatures(family).map((feature) => (
                         <li key={feature}>
                           <FeatureIcon feature={feature} />
                           {FEATURE_LABELS[feature]}
@@ -555,7 +578,7 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
                   <h2 className="sp-block__header">Informations</h2>
                   <div className="sp-block__body">
                     <DetailRow label="Titre" value={title} />
-                    <DetailRow label="Genre" value={storeGenre(idea.family)} link />
+                    <DetailRow label="Genre" value={storeGenre(family)} link />
                     <DetailRow label="Développeur" value={developer} link />
                     <DetailRow label="Éditeur" value={developer} link />
                     <DetailRow label="Date de parution" value={parution} />
@@ -714,7 +737,7 @@ function SystemRequirements() {
 }
 
 /** Pictogrammes des fonctionnalités. Dessinés ici : aucun fichier à charger. */
-function FeatureIcon({ feature }: { feature: 'coop' | 'multi' | 'solo' | 'manette' }) {
+function FeatureIcon({ feature }: { feature: StoreFeature }) {
   const common = { width: 20, height: 14, viewBox: '0 0 20 14', 'aria-hidden': true } as const;
 
   if (feature === 'manette') {
@@ -733,14 +756,29 @@ function FeatureIcon({ feature }: { feature: 'coop' | 'multi' | 'solo' | 'manett
     );
   }
 
-  // Coop et multijoueur partagent la silhouette à deux têtes ; la coop y ajoute
-  // le lien entre les deux.
+  // Multijoueur, coop en ligne et coop en local partagent la silhouette à deux
+  // têtes ; les deux coops y ajoutent le lien entre les joueurs.
   return (
     <svg {...common}>
       <path d="M6.5 1.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Zm7 0a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Zm-7 6.2c2.6 0 4.7 1.5 4.7 3.4v.9H1.8v-.9c0-1.9 2.1-3.4 4.7-3.4Zm7 0c2.6 0 4.7 1.5 4.7 3.4v.9h-4.3v-.9c0-1-.5-2-1.4-2.7.3 0 .7-.1 1-.1Z" />
-      {feature === 'coop' && <circle cx="10" cy="4.4" r="1.1" />}
+      {(feature === 'coop-online' || feature === 'local-coop') && (
+        <circle cx="10" cy="4.4" r="1.1" />
+      )}
     </svg>
   );
+}
+
+/**
+ * La vignette de la bande-annonce dans le bandeau. Une vidéo y est figée sur sa
+ * première image : `preload="metadata"` sans lecture automatique donne
+ * exactement ça, et une vignette qui joue volerait l'attention du lecteur juste
+ * au-dessus.
+ */
+function TrailerThumb({ url }: { url: string }) {
+  if (/\.gif(\?|#|$)/i.test(url)) {
+    return <img src={url} alt="" loading="lazy" />;
+  }
+  return <video src={url} muted playsInline preload="metadata" />;
 }
 
 /**

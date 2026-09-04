@@ -34,6 +34,9 @@ writeFileSync(join(dist, 'index.html'), SPA);
 writeFileSync(join(filesDir, '7', 'uuid-capsule.png'), 'faux-png');
 writeFileSync(join(filesDir, '7', 'uuid-notes.md'), '# Notes\n');
 writeFileSync(join(filesDir, '7', 'uuid-build.zip'), 'PK');
+// Une « bande-annonce » : c'est elle qui a besoin des requêtes `Range`.
+const TRAILER = '0123456789abcdef';
+writeFileSync(join(filesDir, '7', 'uuid-teaser.mp4'), TRAILER);
 // Hors du dossier servi : aucune requête ne doit pouvoir l'atteindre.
 writeFileSync(join(root, 'secret.txt'), 'mot de passe');
 
@@ -147,4 +150,93 @@ test('un dossier ne se liste pas', async (t) => {
     assert.ok(res.statusCode === 404 || res.body === SPA, `${url} -> ${res.statusCode}`);
     assert.ok(!res.body.includes('uuid-capsule'), 'aucun listing de dossier');
   }
+});
+
+test('une vidéo est servie en `inline`, avec les plages annoncées', async (t) => {
+  const { app } = await makeApp(t);
+
+  const res = await app.inject({ method: 'GET', url: '/files/7/uuid-teaser.mp4' });
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers['content-type'], /video\/mp4/);
+  assert.match(res.headers['content-disposition'], /^inline/);
+  // Sans cet en-tête, beaucoup de lecteurs refusent de se déplacer dans le flux
+  // — et certains refusent même de démarrer.
+  assert.equal(res.headers['accept-ranges'], 'bytes');
+  assert.equal(res.body, TRAILER);
+});
+
+test('une requête `Range` renvoie 206 et le morceau demandé', async (t) => {
+  const { app } = await makeApp(t);
+
+  const middle = await app.inject({
+    method: 'GET',
+    url: '/files/7/uuid-teaser.mp4',
+    headers: { range: 'bytes=4-7' },
+  });
+
+  assert.equal(middle.statusCode, 206);
+  assert.equal(middle.headers['content-range'], `bytes 4-7/${TRAILER.length}`);
+  assert.equal(middle.headers['content-length'], '4');
+  assert.equal(middle.body, '4567');
+
+  // `bytes=8-` : jusqu'au bout. C'est ce que demande un lecteur qui reprend.
+  const tail = await app.inject({
+    method: 'GET',
+    url: '/files/7/uuid-teaser.mp4',
+    headers: { range: 'bytes=8-' },
+  });
+  assert.equal(tail.statusCode, 206);
+  assert.equal(tail.headers['content-range'], `bytes 8-15/${TRAILER.length}`);
+  assert.equal(tail.body, '89abcdef');
+
+  // `bytes=-4` : les quatre derniers octets.
+  const last = await app.inject({
+    method: 'GET',
+    url: '/files/7/uuid-teaser.mp4',
+    headers: { range: 'bytes=-4' },
+  });
+  assert.equal(last.statusCode, 206);
+  assert.equal(last.body, 'cdef');
+});
+
+test('une plage hors du fichier renvoie 416 et annonce la vraie taille', async (t) => {
+  const { app } = await makeApp(t);
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/files/7/uuid-teaser.mp4',
+    headers: { range: 'bytes=999-1200' },
+  });
+
+  assert.equal(res.statusCode, 416);
+  assert.equal(res.headers['content-range'], `bytes */${TRAILER.length}`);
+  assert.equal(res.body, '');
+});
+
+test('un `Range` illisible est ignoré : le fichier part en entier', async (t) => {
+  const { app } = await makeApp(t);
+
+  for (const range of ['octets=0-3', 'bytes=abc', 'bytes=', '']) {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/files/7/uuid-teaser.mp4',
+      headers: { range },
+    });
+    assert.equal(res.statusCode, 200, `« ${range} » aurait dû être ignoré`);
+    assert.equal(res.body, TRAILER);
+  }
+});
+
+test('un fichier téléchargé ne promet pas de plages qu’il ne sert pas', async (t) => {
+  const { app } = await makeApp(t);
+
+  const zip = await app.inject({
+    method: 'GET',
+    url: '/files/7/uuid-build.zip',
+    headers: { range: 'bytes=0-0' },
+  });
+
+  assert.equal(zip.headers['accept-ranges'], 'none');
+  assert.equal(zip.statusCode, 200, 'le `Range` est ignoré, pas honoré à moitié');
 });

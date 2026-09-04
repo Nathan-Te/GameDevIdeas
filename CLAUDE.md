@@ -50,6 +50,7 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `DB_PATH` | — | Chemin complet de la base, prioritaire sur `DATA_DB_DIR`. `:memory:` pour les tests. |
 | `DATA_FILES_DIR` | `./data/files` | Dossier des fichiers utilisateur, servi par `/files/*`. |
 | `MAX_UPLOAD_MB` | `50` | Taille maximale d'un fichier envoyé. Au-delà : 413, et rien n'est écrit. |
+| `MAX_TRAILER_MB` | `100` | Limite propre aux bandes-annonces (`.gif`, `.mp4`, `.webm`). Une vidéo pèse plus qu'une capture. |
 | `LINK_TITLE_LOOKUP` | activé | Aller chercher le titre de la page pour libeller un lien collé sans label. Coupé, le libellé retombe sur le nom de domaine. |
 | `DEVELOPER_NAME` | `Nathan` | Nom affiché comme développeur et éditeur sur la vue store, servi par `GET /api/config`. |
 | `SERVE_STATIC`, `WEB_DIST` | `web/dist` s'il existe | Front statique avec repli SPA. |
@@ -61,19 +62,25 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | Route | Rôle |
 |---|---|
 | `GET /api/config` | Configuration lisible par le front. Une seule valeur : `developer_name`. |
+| `GET /api/families` | Les familles, dans leur ordre, avec leur nombre d'idées (`idea_count`). |
+| `POST /api/families` | Création. Le slug est déduit du libellé s'il n'est pas donné. |
+| `PATCH /api/families/:slug` | `label`, `slug`, `store_tags`, `features`, `position`. Renommer le slug met à jour les idées dans la même transaction. |
+| `DELETE /api/families/:slug` | Refusé en 409 tant qu'une idée l'utilise, corbeille comprise ; le message dit combien. |
 | `GET /api/ideas` | Catalogue, filtres `family` / `status` / `minScore` / `wishlisted` / `deleted`, tri `sort`. |
 | `POST /api/ideas` | Création. |
-| `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id` et `wishlisted`), corbeille. |
+| `GET`, `PATCH`, `DELETE /api/ideas/:slug` | Lecture, mise à jour partielle (dont `capsule_file_id`, `trailer_file_id` et `wishlisted`), corbeille. |
 | `POST /api/ideas/:slug/restore` | Sort l'idée de la corbeille. 404 si elle n'y est pas. |
 | `DELETE /api/ideas/:slug/purge` | Suppression définitive. N'accepte qu'une idée en corbeille (404 sinon) : verdicts, pièces jointes et idée dans une transaction, puis `data/files/{idea_id}/` en entier. |
 | `GET`, `POST /api/ideas/:slug/verdicts` | Historique et ajout d'un verdict. |
 | `GET`, `POST /api/ideas/:slug/attachments` | Liste ; ajout par multipart (fichiers) ou JSON `{ url, label? }` (lien). |
 | `PUT /api/ideas/:slug/attachments/order` | Réordonne, `{ ids: [...] }` complet, en une transaction. |
 | `PATCH`, `DELETE /api/attachments/:id` | `label` / `position` / `link_type` ; suppression ligne + fichier. |
-| `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. |
+| `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. Les médias jouables (`.gif`, `.mp4`, `.webm`, `.mp3`, `.ogg`) sont servis `inline` avec `Accept-Ranges: bytes` et honorent les requêtes `Range` (206, 416 hors bornes) — sans quoi une vidéo ne se lit pas dans le navigateur. |
 | Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
 
-Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam` et `/corbeille`.
+Côté front, cinq vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam`, `/corbeille` et `/familles`.
+
+`/familles` édite la liste des familles : libellé, étiquettes store en pilules, fonctionnalités en cases, ordre à la poignée. Le sélecteur de famille de la page idée et le filtre du catalogue lisent cette liste, jamais une énumération du code.
 
 `/idees/:slug/steam` est une réplique fidèle du store de bureau, sans logo ni marque ; seul le bouton de liste de souhaits est actif. Le reste — enchaîner les idées en respectant les filtres, revenir à l'édition — vit dans une fine barre de service au-dessus de la maquette, hors du photomontage. Elle n'a pas de version mobile : elle s'éloigne (`zoom`) et se fait défiler.
 
@@ -83,6 +90,17 @@ Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `
 - **Lot 2 — Pièces jointes** : livré. Upload, liens typés, markdown rendu, capsule, galerie, `restore`.
 - **Lot 3 — Vitrine** : livré. Corbeille et purge, vue Steam, feuille de tokens, passe de DA et responsive.
 - **Lot 3b — La vraie vitrine** : livré. Vue store refaite en réplique fidèle, liste de souhaits (migration `003`, `ideas.wishlisted_at`), filtre et marqueur au catalogue, `DEVELOPER_NAME`. **La v1 est close.**
+- **Lot 4 — Familles éditables et bande-annonce** : livré. Table `families` et écran `/familles` (migration `004`), `kind` `trailer` et `ideas.trailer_file_id` (migration `005`), `Range` sur `/files/*`, lecteur en tête de visionneuse et aperçu au survol du catalogue.
+
+## Modèle de données
+
+- `ideas` — la fiche. `family` est **un slug de la table `families`**, validé par l'application et non par une clé étrangère : renommer un slug de famille met à jour les idées portant l'ancien, dans la même transaction. `capsule_file_id` et `trailer_file_id` pointent une pièce jointe de l'idée, en `ON DELETE SET NULL`.
+- `verdicts` — l'historique, jamais écrasé.
+- `attachments` — `kind` vaut `image`, `trailer`, `markdown`, `file` ou `link`. Un `.gif`, un `.mp4` ou un `.webm` arrive en `trailer` : **un GIF attaché est une bande-annonce, pas une capture**.
+- `families` (migration `004`) — `slug`, `label`, `store_tags` (JSON, les étiquettes de la page store), `features` (JSON parmi `solo`, `coop-online`, `multiplayer`, `local-coop`), `position`. Peuplée au démarrage depuis `SEED_FAMILIES` de `shared/store-model.js`, **et seulement si elle est vide** : le seed ne ressuscite jamais une famille supprimée.
+- Migration `005` — `ideas.trailer_file_id`, et la reconstruction de `attachments` pour élargir sa contrainte `CHECK` au `kind` `trailer`.
+
+Le support manette n'est pas une fonctionnalité de famille : il est ajouté à toutes les fiches par `storeFeatures`.
 
 ## Convention des migrations
 
@@ -91,6 +109,7 @@ Côté front, quatre vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `
 - Le serveur applique les migrations en attente à chaque démarrage ; `npm run migrate` fait la même chose sans écouter de port.
 - **Une migration livrée ne se modifie pas.** Une correction, un renommage ou un ajout de colonne passe par une nouvelle migration numérotée.
 - Le SQL est écrit en clair : pas d'ORM, pas de générateur de schéma.
+- Les clés étrangères sont **coupées le temps des migrations**, puis revérifiées par `foreign_key_check` dans la transaction de chaque migration. C'est la procédure documentée par SQLite pour reconstruire une table — seul moyen d'y modifier une contrainte `CHECK` — et sans elle le `DROP TABLE` de l'ancienne table déclencherait les `ON DELETE` de celles qui la référencent.
 
 ## Convention des READMEs de lot
 
@@ -106,14 +125,18 @@ Chaque lot livré a son fichier dans `Docs/lots/`, nommé `lot-NN-nom.md` (`lot-
 
 ```
 shared/           store-model.js — la traduction « idée » → « fiche de magasin »
-                  (JS pur, importé par le front et testé par node:test)
+                  (JS pur, importé par le front et testé par node:test).
+                  Les étiquettes et fonctionnalités y sont *lues sur la famille* ;
+                  SEED_FAMILIES n'y sert qu'au peuplement initial de la table.
 server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
   src/            config, db, migrate, routes, validation, dépôts SQL,
-                  files.js (disque et garde de chemin), links.js (liens typés)
+                  files.js (disque, garde de chemin, `Range`), links.js (liens typés),
+                  families-repo.js (les familles, seed compris)
   test/           node:test, une base en mémoire par test
 web/              Front React + Vite + TypeScript
   src/            api (client typé), router, filters (filtres d'URL partagés),
+                  families.ts (la liste chargée une fois, partagée par les vues),
                   pages, composants, tokens.css puis styles.css,
                   steam.css (la palette du photomontage, hors tokens)
 Docs/             seed-vitrine.md (source de vérité) et lots/

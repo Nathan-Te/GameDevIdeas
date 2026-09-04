@@ -32,12 +32,15 @@ test('POST /api/ideas dérive le slug du titre et le rend unique', async (t) => 
   assert.equal(third.slug, 'roguelike-de-peche-3');
 });
 
-test('POST /api/ideas rejette une famille ou un statut hors énumération', async (t) => {
+test('POST /api/ideas rejette une famille inconnue ou un statut hors énumération', async (t) => {
   const { app } = await makeApp(t);
 
+  // La famille n'a plus d'énumération dans le schéma : c'est un slug de la
+  // table `families`, vérifié par l'application (lot 4). D'où `bad_request` et
+  // non `validation_error` — l'erreur est métier, pas syntaxique.
   const badFamily = await post(app, '/api/ideas', { family: 'roguelite' });
   assert.equal(badFamily.status, 400);
-  assert.equal(badFamily.body.error, 'validation_error');
+  assert.equal(badFamily.body.error, 'bad_request');
   assert.ok(badFamily.body.message, 'un message lisible accompagne l’erreur');
 
   const badStatus = await post(app, '/api/ideas', { status: 'terminé' });

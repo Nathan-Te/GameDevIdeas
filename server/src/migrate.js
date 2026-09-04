@@ -28,15 +28,45 @@ export function runMigrations(db, { dir = config.migrationsDir, logger } = {}) {
   );
 
   const pending = listMigrations(dir).filter((m) => !applied.has(m.version));
+  if (!pending.length) return [];
 
-  for (const migration of pending) {
-    const sql = readFileSync(migration.file, 'utf8');
-    // Chaque migration est atomique : soit tout passe, soit rien n'est appliqué.
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration.version);
-    })();
-    logger?.info?.(`migration appliquée : ${migration.version}`);
+  /**
+   * Les clés étrangères sont coupées le temps des migrations, et revérifiées
+   * juste après par `foreign_key_check`.
+   *
+   * C'est la procédure que documente SQLite pour reconstruire une table, seul
+   * moyen d'y modifier une contrainte `CHECK` (voir `005-trailer.sql`). Sans
+   * cette coupure, le `DROP TABLE` de l'ancienne table déclencherait les
+   * actions `ON DELETE` des tables qui la référencent : la reconstruction
+   * effacerait les données qu'elle est censée recopier.
+   *
+   * Le pragma est posé hors transaction — à l'intérieur, SQLite l'ignore
+   * silencieusement. La vérification, elle, est faite dans la transaction de
+   * chaque migration : une migration qui casse une référence est annulée.
+   */
+  const enforced = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+
+  try {
+    for (const migration of pending) {
+      const sql = readFileSync(migration.file, 'utf8');
+      // Chaque migration est atomique : soit tout passe, soit rien n'est appliqué.
+      db.transaction(() => {
+        db.exec(sql);
+
+        const broken = db.pragma('foreign_key_check');
+        if (broken.length) {
+          throw new Error(
+            `migration ${migration.version} : ${broken.length} référence(s) cassée(s) — annulée`,
+          );
+        }
+
+        db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration.version);
+      })();
+      logger?.info?.(`migration appliquée : ${migration.version}`);
+    }
+  } finally {
+    if (enforced) db.pragma('foreign_keys = ON');
   }
 
   return pending.map((m) => m.version);

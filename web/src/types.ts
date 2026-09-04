@@ -1,17 +1,6 @@
-/** Miroir des énumérations de `server/src/schemas.js`. */
-export const FAMILIES = [
-  'friendslop',
-  'dopamine-solo',
-  'sim-fantasme',
-  'inspection',
-  'tactique',
-  'party',
-  'coop-2',
-  'fps',
-  'educatif',
-  'autre',
-] as const;
+import type { FamilyFeature } from '../../shared/store-model';
 
+/** Miroir des énumérations de `server/src/schemas.js`. */
 export const STATUSES = [
   'idee',
   'reserve',
@@ -25,24 +14,43 @@ export const STATUSES = [
 /** Miroir de `LINK_TYPES` dans `server/src/links.js`. Pilote l'icône du lien. */
 export const LINK_TYPES = ['trello', 'asset-store', 'git', 'steam', 'video', 'autre'] as const;
 
-export type Family = (typeof FAMILIES)[number];
 export type Status = (typeof STATUSES)[number];
 export type Sort = 'updated' | 'created' | 'score' | 'title';
 export type LinkType = (typeof LINK_TYPES)[number];
-export type AttachmentKind = 'image' | 'markdown' | 'file' | 'link';
+export type AttachmentKind = 'image' | 'markdown' | 'file' | 'link' | 'trailer';
 
-/** Libellés lisibles : les valeurs stockées restent celles du seed. */
-export const FAMILY_LABELS: Record<Family, string> = {
-  friendslop: 'Friendslop',
-  'dopamine-solo': 'Dopamine solo',
-  'sim-fantasme': 'Sim fantasme',
-  inspection: 'Inspection',
-  tactique: 'Tactique',
-  party: 'Party',
-  'coop-2': 'Coop à 2',
-  fps: 'FPS',
-  educatif: 'Éducatif',
-  autre: 'Autre',
+/**
+ * Une famille, telle que `GET /api/families` la sert. Ce n'est plus une
+ * énumération figée depuis le lot 4 : la liste vit en base et s'édite sur
+ * `/familles`, donc `Idea.family` est un slug libre côté types.
+ */
+export interface Family {
+  id: number;
+  slug: string;
+  label: string;
+  /** Les étiquettes affichées sur la page store. */
+  store_tags: string[];
+  /** Les fonctionnalités déduites, hors support manette. */
+  features: FamilyFeature[];
+  position: number;
+  /** Nombre d'idées qui la portent, corbeille comprise. Sert au refus de suppression. */
+  idea_count: number;
+}
+
+/** Champs d'une famille qu'un POST/PATCH peut écrire. */
+export interface FamilyPatch {
+  slug?: string;
+  label?: string;
+  store_tags?: string[];
+  features?: FamilyFeature[];
+  position?: number;
+}
+
+export const FAMILY_FEATURE_LABELS: Record<FamilyFeature, string> = {
+  solo: 'Solo',
+  'coop-online': 'Coop en ligne',
+  multiplayer: 'Multijoueur',
+  'local-coop': 'Coop en local',
 };
 
 export const STATUS_LABELS: Record<Status, string> = {
@@ -104,13 +112,18 @@ export interface Idea {
   pitch: string;
   gif: string;
   price_cents: number | null;
-  family: Family;
+  /** Slug d'une famille de la table `families`. */
+  family: string;
   status: Status;
   competition: string;
   /** Image de capsule choisie parmi les pièces jointes de l'idée. */
   capsule_file_id: number | null;
   /** Adresse de cette image, ou `null` tant qu'aucune capsule n'est choisie. */
   capsule_url: string | null;
+  /** Bande-annonce choisie parmi les pièces jointes `trailer` de l'idée. */
+  trailer_file_id: number | null;
+  /** Adresse de cette bande-annonce, ou `null` s'il n'y en a pas. */
+  trailer_url: string | null;
   /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
   attachment_count: number;
   /**
@@ -138,6 +151,7 @@ export type IdeaPatch = Partial<
     | 'status'
     | 'competition'
     | 'capsule_file_id'
+    | 'trailer_file_id'
   >
 > & {
   /** Booléen à l'entrée, `wishlisted_at` en sortie. */
@@ -152,7 +166,8 @@ export interface AttachmentPatch {
 }
 
 export interface IdeaFilters {
-  family?: Family | '';
+  /** Slug d'une famille, ou la chaîne vide pour « toutes ». */
+  family?: string;
   status?: Status | '';
   minScore?: number | '';
   sort?: Sort;

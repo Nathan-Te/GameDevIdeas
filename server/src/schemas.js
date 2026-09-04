@@ -7,23 +7,19 @@
  * qui entre ; ce qui sort est construit explicitement par `serializeIdea`.
  */
 
+import { FAMILY_FEATURES } from '../../shared/store-model.js';
+
 import { LINK_TYPES } from './links.js';
 
 export { LINK_TYPES };
 
-/** Énumération suggérée par le seed. `family` reste libre côté base. */
-export const FAMILIES = [
-  'friendslop',
-  'dopamine-solo',
-  'sim-fantasme',
-  'inspection',
-  'tactique',
-  'party',
-  'coop-2',
-  'fps',
-  'educatif',
-  'autre',
-];
+/**
+ * `family` n'a plus d'énumération : c'est un slug de la table `families`, que
+ * Nathan édite. Le schéma vérifie la forme, l'existence est vérifiée par
+ * l'application (`assertFamilyExists`) — une énumération figée ici rendrait la
+ * table éditable pour rien.
+ */
+const familySlug = { type: 'string', minLength: 1, maxLength: 80 };
 
 export const STATUSES = [
   'idee',
@@ -47,7 +43,7 @@ const ideaFields = {
   pitch: text(4000),
   gif: text(2000),
   price_cents: { type: ['integer', 'null'], minimum: 0, maximum: 100000000 },
-  family: { type: 'string', enum: FAMILIES },
+  family: familySlug,
   status: { type: 'string', enum: STATUSES },
   competition: text(4000),
 };
@@ -77,6 +73,11 @@ export const patchIdeaBody = {
      */
     capsule_file_id: { type: ['integer', 'null'], minimum: 1 },
     /**
+     * La bande-annonce, même politique que la capsule : `null` la retire,
+     * sinon la pièce doit être une bande-annonce de cette idée.
+     */
+    trailer_file_id: { type: ['integer', 'null'], minimum: 1 },
+    /**
      * Absent de `createIdeaBody` aussi : on ne met pas en liste de souhaits une
      * idée qu'on vient d'écrire, on l'y met après l'avoir regardée. Booléen à
      * l'entrée, date en base (`wishlisted_at`).
@@ -89,7 +90,7 @@ export const listIdeasQuery = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    family: { type: 'string', enum: FAMILIES },
+    family: familySlug,
     status: { type: 'string', enum: STATUSES },
     minScore: { type: 'integer', minimum: 0, maximum: 5 },
     /** Absent = tout ; `true` = la liste de souhaits ; `false` = le reste. */
@@ -149,5 +150,42 @@ export const createVerdictBody = {
   properties: {
     score: { type: 'integer', minimum: 0, maximum: 5 },
     note: text(4000),
+  },
+};
+
+/** Corps de création d'une famille. Le slug est déduit du libellé s'il manque. */
+export const createFamilyBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    slug: familySlug,
+    label: text(80),
+    store_tags: {
+      type: 'array',
+      maxItems: 20,
+      items: { type: 'string', minLength: 1, maxLength: 40 },
+    },
+    features: {
+      type: 'array',
+      maxItems: FAMILY_FEATURES.length,
+      items: { type: 'string', enum: FAMILY_FEATURES },
+    },
+  },
+};
+
+export const familySlugParams = {
+  type: 'object',
+  required: ['slug'],
+  properties: { slug: familySlug },
+};
+
+export const patchFamilyBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    ...createFamilyBody.properties,
+    /** Rang dans la liste, borné à la taille de la liste par le dépôt. */
+    position: { type: 'integer', minimum: 0, maximum: 10000 },
   },
 };

@@ -12,9 +12,19 @@ import { config } from './config.js';
  * `attachments` ne garde que le chemin relatif à `data/files/`.
  */
 
-/** Le seed fixe la liste : png, jpg, webp, gif. Le SVG n'en fait pas partie. */
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
-const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+/**
+ * png, jpg, webp. Le SVG n'en fait pas partie.
+ *
+ * Le GIF a quitté cette liste au lot 4 : un GIF attaché est une bande-annonce,
+ * pas une capture. C'était le constat qui a ouvert le lot — on ne met pas un
+ * GIF dans une galerie de captures, on le joue.
+ */
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+/** Ce qui peut servir de bande-annonce : un GIF ou une courte vidéo. */
+const TRAILER_EXTENSIONS = new Set(['.gif', '.mp4', '.webm']);
+const TRAILER_MIMES = new Set(['image/gif', 'video/mp4', 'video/webm']);
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const MARKDOWN_MIMES = new Set(['text/markdown', 'text/x-markdown']);
@@ -64,14 +74,19 @@ export function sanitizeFilename(name) {
 }
 
 /**
- * `image` (png, jpg, webp, gif), `markdown` (.md), sinon `file`. L'extension et
- * le type MIME sont examinés tous les deux : un navigateur peut envoyer
- * `application/octet-stream` pour un PNG parfaitement valide.
+ * `trailer` (gif, mp4, webm), `image` (png, jpg, webp), `markdown` (.md),
+ * sinon `file`. L'extension et le type MIME sont examinés tous les deux : un
+ * navigateur peut envoyer `application/octet-stream` pour un PNG parfaitement
+ * valide.
+ *
+ * La bande-annonce est testée en premier : `image/gif` est une image pour le
+ * navigateur, une bande-annonce pour Vitrine.
  */
 export function kindFromFile({ filename = '', mimetype = '' } = {}) {
   const ext = extname(String(filename)).toLowerCase();
   const mime = String(mimetype).split(';')[0].trim().toLowerCase();
 
+  if (TRAILER_EXTENSIONS.has(ext) || TRAILER_MIMES.has(mime)) return 'trailer';
   if (IMAGE_EXTENSIONS.has(ext) || IMAGE_MIMES.has(mime)) return 'image';
   if (MARKDOWN_EXTENSIONS.has(ext) || MARKDOWN_MIMES.has(mime)) return 'markdown';
   return 'file';
@@ -135,4 +150,52 @@ export function contentTypeFor(pathname) {
   return inline
     ? { type: inline, inline: true }
     : { type: 'application/octet-stream', inline: false };
+}
+
+/**
+ * Les types que le navigateur doit pouvoir lire par morceaux : une vidéo ne se
+ * lit pas sans requêtes `Range`, et un lecteur qui ne peut pas se déplacer dans
+ * le flux affiche un rectangle noir. Le GIF y est aussi — il ne s'en sert pas,
+ * mais annoncer `Accept-Ranges` sur tout ce qui est joué évite d'avoir à
+ * distinguer les deux ailleurs.
+ */
+const SEEKABLE = new Set(['.gif', '.mp4', '.webm', '.mp3', '.ogg']);
+
+export function isSeekable(pathname) {
+  return SEEKABLE.has(extname(pathname).toLowerCase());
+}
+
+/**
+ * Analyse un en-tête `Range`. Une seule plage est gérée — c'est tout ce qu'un
+ * lecteur vidéo demande — et le reste est traité comme une absence de `Range`,
+ * ce que la RFC autorise explicitement.
+ *
+ * Renvoie `null` quand il n'y a rien à interpréter, `{ unsatisfiable: true }`
+ * quand la plage est hors du fichier (416), sinon `{ start, end }` inclusifs.
+ */
+export function parseRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header ?? '').trim());
+  if (!match) return null;
+
+  const [, rawStart, rawEnd] = match;
+  if (rawStart === '' && rawEnd === '') return null;
+
+  let start;
+  let end;
+
+  if (rawStart === '') {
+    // `bytes=-500` : les 500 derniers octets.
+    const length = Number(rawEnd);
+    if (length <= 0) return { unsatisfiable: true };
+    start = Math.max(0, size - length);
+    end = size - 1;
+  } else {
+    start = Number(rawStart);
+    end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1);
+  }
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start >= size || start > end) return { unsatisfiable: true };
+
+  return { start, end };
 }

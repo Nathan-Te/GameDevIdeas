@@ -13,32 +13,99 @@
  */
 
 /**
- * Famille Vitrine → étiquettes telles qu'un magasin les afficherait. Deux
- * minimum par famille : une seule étiquette ne ressemble pas à une vraie fiche,
- * et un test le vérifie.
+ * Le peuplement initial de la table `families` (migration `004`).
  *
- * Ce sont des libellés de magasin, pas ceux de Vitrine : « friendslop »
- * n'existe sur aucun store, « Coop » et « Comédie » si.
+ * Ce n'est **pas** la source de vérité des familles : depuis le lot 4, elle est
+ * la table `families`, que Nathan édite depuis `/familles`. Cette constante ne
+ * sert qu'au premier démarrage, quand la table est vide, pour qu'aucune idée
+ * existante ne change de sens en passant d'une liste figée à une liste éditable.
+ *
+ * Les étiquettes sont des libellés de magasin, pas ceux de Vitrine :
+ * « friendslop » n'existe sur aucun store, « Coop » et « Comédie » si.
  */
-export const STORE_TAGS = {
-  friendslop: ['Coop', 'Physique', 'Comédie', 'Multijoueur'],
-  'dopamine-solo': ['Roguelite', 'Arcade', 'Solo', 'Difficile'],
-  'sim-fantasme': ['Simulation', 'Bac à sable', 'Immersif', 'Solo'],
-  inspection: ['Simulation', 'Gestion', 'Réflexion', 'Point & click'],
-  tactique: ['Tactique', 'Tour par tour', 'Stratégie', 'Réflexion'],
-  party: ['Fête', 'Multijoueur local', 'Comédie', 'Mini-jeux'],
-  'coop-2': ['Coop en ligne', 'Deux joueurs', 'Aventure', 'Réflexion'],
-  fps: ['FPS', 'Action', 'Tir', 'Multijoueur'],
-  educatif: ['Éducatif', 'Casual', 'Simulation', 'Famille'],
-  autre: ['Indépendant', 'Aventure', 'Casual'],
-};
+export const SEED_FAMILIES = [
+  {
+    slug: 'friendslop',
+    label: 'Friendslop',
+    store_tags: ['Coop', 'Physique', 'Comédie', 'Multijoueur'],
+    features: ['coop-online', 'multiplayer'],
+  },
+  {
+    slug: 'dopamine-solo',
+    label: 'Dopamine solo',
+    store_tags: ['Roguelite', 'Arcade', 'Solo', 'Difficile'],
+    features: ['solo'],
+  },
+  {
+    slug: 'sim-fantasme',
+    label: 'Sim fantasme',
+    store_tags: ['Simulation', 'Bac à sable', 'Immersif', 'Solo'],
+    features: ['solo'],
+  },
+  {
+    slug: 'inspection',
+    label: 'Inspection',
+    store_tags: ['Simulation', 'Gestion', 'Réflexion', 'Point & click'],
+    features: ['solo'],
+  },
+  {
+    slug: 'tactique',
+    label: 'Tactique',
+    store_tags: ['Tactique', 'Tour par tour', 'Stratégie', 'Réflexion'],
+    features: ['solo'],
+  },
+  {
+    slug: 'party',
+    label: 'Party',
+    store_tags: ['Fête', 'Multijoueur local', 'Comédie', 'Mini-jeux'],
+    features: ['coop-online', 'multiplayer'],
+  },
+  {
+    slug: 'coop-2',
+    label: 'Coop à 2',
+    store_tags: ['Coop en ligne', 'Deux joueurs', 'Aventure', 'Réflexion'],
+    features: ['coop-online', 'multiplayer'],
+  },
+  {
+    slug: 'fps',
+    label: 'FPS',
+    store_tags: ['FPS', 'Action', 'Tir', 'Multijoueur'],
+    features: ['coop-online', 'multiplayer'],
+  },
+  {
+    slug: 'educatif',
+    label: 'Éducatif',
+    store_tags: ['Éducatif', 'Casual', 'Simulation', 'Famille'],
+    features: ['solo'],
+  },
+  {
+    slug: 'autre',
+    label: 'Autre',
+    store_tags: ['Indépendant', 'Aventure', 'Casual'],
+    features: ['solo'],
+  },
+];
 
-/** Repli pour une famille inconnue — la base laisse le champ libre. */
-const FALLBACK_TAGS = STORE_TAGS.autre;
+/**
+ * Les fonctionnalités qu'une famille peut porter. La liste est fermée : ce sont
+ * des lignes de fiche de magasin avec leur pictogramme, pas du texte libre.
+ */
+export const FAMILY_FEATURES = ['solo', 'coop-online', 'multiplayer', 'local-coop'];
 
-/** Les étiquettes de magasin d'une famille. */
+/**
+ * Repli quand une idée porte une famille introuvable — la base garde le texte,
+ * et une famille peut être renommée pendant qu'un onglet est ouvert.
+ */
+const FALLBACK_TAGS = ['Indépendant', 'Aventure', 'Casual'];
+
+/**
+ * Les étiquettes de magasin d'une famille. `family` est la ligne de la table
+ * `families`, telle que l'API la sert, ou `null` si l'idée en pointe une qui
+ * n'existe plus.
+ */
 export function storeTags(family) {
-  return STORE_TAGS[family] ?? FALLBACK_TAGS;
+  const tags = family?.store_tags;
+  return Array.isArray(tags) && tags.length > 0 ? tags : FALLBACK_TAGS;
 }
 
 /**
@@ -118,19 +185,23 @@ export function isRecommended(score) {
 }
 
 /**
- * Les fonctionnalités listées dans la colonne de droite, déduites de la
- * famille. Le support manette est sur toutes les fiches : c'est la ligne qu'on
- * lit sans la lire, et son absence se remarquerait.
+ * Les fonctionnalités listées dans la colonne de droite, lues sur la famille.
+ * Le support manette est ajouté à toutes les fiches : c'est la ligne qu'on lit
+ * sans la lire, et son absence se remarquerait. Elle n'est donc pas une
+ * fonctionnalité de famille et ne s'édite pas.
  */
 export function storeFeatures(family) {
-  const social = ['friendslop', 'party', 'coop-2', 'fps'].includes(family);
-  return social ? ['coop', 'multi', 'manette'] : ['solo', 'manette'];
+  const declared = Array.isArray(family?.features)
+    ? family.features.filter((feature) => FAMILY_FEATURES.includes(feature))
+    : [];
+  return [...declared, 'manette'];
 }
 
 export const FEATURE_LABELS = {
-  coop: 'Coop en ligne',
-  multi: 'Multijoueur',
   solo: 'Solo',
+  'coop-online': 'Coop en ligne',
+  multiplayer: 'Multijoueur',
+  'local-coop': 'Coop en local',
   manette: 'Support complet des manettes',
 };
 

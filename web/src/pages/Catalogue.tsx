@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api, ApiError } from '../api';
 import { formatPrice, ScoreBadge, StatusBadge } from '../components/badges';
+import { PlayBadge, TrailerMedia } from '../components/Trailer';
 import {
   filtersFromSearch,
   hasActiveFilters,
@@ -9,9 +10,10 @@ import {
   SORTS,
   steamHref,
 } from '../filters';
+import { useFamilies } from '../families';
 import { Link, navigate } from '../router';
-import { FAMILIES, FAMILY_LABELS, SORT_LABELS, STATUS_LABELS, STATUSES } from '../types';
-import type { Family, Idea, IdeaFilters, Sort, Status } from '../types';
+import { SORT_LABELS, STATUS_LABELS, STATUSES } from '../types';
+import type { Idea, IdeaFilters, Sort, Status } from '../types';
 
 /** Les filtres remis à zéro. Le tri survit : ce n'est pas un filtre. */
 function clearedFilters(sort: Sort | undefined): IdeaFilters {
@@ -26,6 +28,7 @@ export function Catalogue() {
   const [trashed, setTrashed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const { families } = useFamilies();
 
   const load = useCallback(async (active: IdeaFilters) => {
     try {
@@ -92,6 +95,9 @@ export function Catalogue() {
         </div>
 
         <div className="page__actions">
+          <Link to="/familles" className="button button--ghost">
+            Familles
+          </Link>
           <Link to="/corbeille" className="button button--ghost">
             Corbeille
             {trashed > 0 && <span className="button__count">{trashed}</span>}
@@ -112,12 +118,12 @@ export function Catalogue() {
           <span>Famille</span>
           <select
             value={filters.family ?? ''}
-            onChange={(event) => update({ family: event.target.value as Family | '' })}
+            onChange={(event) => update({ family: event.target.value })}
           >
             <option value="">Toutes</option>
-            {FAMILIES.map((family) => (
-              <option key={family} value={family}>
-                {FAMILY_LABELS[family]}
+            {families.map((family) => (
+              <option key={family.slug} value={family.slug}>
+                {family.label}
               </option>
             ))}
           </select>
@@ -255,10 +261,33 @@ export function Catalogue() {
 function IdeaCard({ idea, search }: { idea: Idea; search: string }) {
   const price = formatPrice(idea.price_cents);
   const title = idea.title || 'Sans titre';
+  /**
+   * Au survol, la bande-annonce remplace la capsule et se joue — comme sur la
+   * grille d'un magasin. Elle n'est montée qu'au survol : cinquante vidéos en
+   * arrière-plan feraient ramer la page pour un effet qu'on ne voit jamais.
+   */
+  const [playing, setPlaying] = useState(false);
+  const play = () => setPlaying(Boolean(idea.trailer_url));
 
   return (
-    <article className="card">
+    <article
+      className="card"
+      onPointerEnter={play}
+      onPointerLeave={() => setPlaying(false)}
+      // Au clavier aussi : la carte se parcourt au Tab, et l'aperçu doit suivre
+      // le focus comme il suit la souris.
+      onFocus={play}
+      onBlur={() => setPlaying(false)}
+    >
       <div className="card__capsule">
+        {playing && idea.trailer_url && (
+          <TrailerMedia className="card__trailer" url={idea.trailer_url} title={title} />
+        )}
+
+        {!playing && idea.trailer_url && (
+          <PlayBadge className="card__play" />
+        )}
+
         {idea.wishlisted_at && (
           <span className="card__wish" title="Sur la liste de souhaits">
             <span aria-hidden="true">✔</span> Souhaitée

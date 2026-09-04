@@ -7,6 +7,7 @@ import { EditableText } from './EditableText';
 import { GripIcon, KindIcon, LinkIcon } from './icons';
 import { Lightbox } from './Lightbox';
 import { MarkdownFile } from './Markdown';
+import { TrailerMedia } from './Trailer';
 import { LINK_TYPE_LABELS, LINK_TYPES } from '../types';
 import type { Attachment, LinkType } from '../types';
 
@@ -21,20 +22,28 @@ interface Upload {
 interface AttachmentsProps {
   slug: string;
   capsuleFileId: number | null;
+  trailerFileId: number | null;
   /** Enregistre la capsule côté idée ; la page idée en garde la maîtrise. */
   onCapsuleChange: (id: number | null) => void | Promise<void>;
+  /** Même chose pour la bande-annonce. */
+  onTrailerChange: (id: number | null) => void | Promise<void>;
   /**
    * Appelé quand la capsule vient de disparaître avec sa pièce jointe : le
    * serveur a déjà remis `capsule_file_id` à `null`, la page doit le refléter.
    */
   onCapsuleLost: () => void;
+  /** Idem pour `trailer_file_id`. */
+  onTrailerLost: () => void;
 }
 
 export function Attachments({
   slug,
   capsuleFileId,
+  trailerFileId,
   onCapsuleChange,
+  onTrailerChange,
   onCapsuleLost,
+  onTrailerLost,
 }: AttachmentsProps) {
   const [attachments, setAttachments] = useState<Attachment[] | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -152,8 +161,9 @@ export function Attachments({
       setError(null);
       await api.deleteAttachment(attachment.id);
       setAttachments((current) => (current ?? []).filter((item) => item.id !== attachment.id));
-      // Le serveur a déjà libéré la capsule : la page idée doit le savoir.
+      // Le serveur a déjà libéré capsule et bande-annonce : la page doit le savoir.
       if (attachment.id === capsuleFileId) onCapsuleLost();
+      if (attachment.id === trailerFileId) onTrailerLost();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Suppression impossible.');
     }
@@ -181,7 +191,7 @@ export function Attachments({
       <h2 className="field__label">
         Pièces jointes
         <span className="field__hint">
-          Images, markdown, fichiers et liens. Glisse pour réordonner.
+          Images, bandes-annonces, markdown, fichiers et liens. Glisse pour réordonner.
         </span>
       </h2>
 
@@ -255,12 +265,14 @@ export function Attachments({
         <AttachmentList
           attachments={attachments}
           capsuleFileId={capsuleFileId}
+          trailerFileId={trailerFileId}
           images={images}
           onReorder={commitOrder}
           onRename={rename}
           onRetype={retype}
           onRemove={remove}
           onCapsuleChange={onCapsuleChange}
+          onTrailerChange={onTrailerChange}
           onView={setViewing}
         />
       )}
@@ -376,22 +388,26 @@ function LinkField({ onSubmit }: { onSubmit: (url: string) => Promise<void> }) {
 function AttachmentList({
   attachments,
   capsuleFileId,
+  trailerFileId,
   images,
   onReorder,
   onRename,
   onRetype,
   onRemove,
   onCapsuleChange,
+  onTrailerChange,
   onView,
 }: {
   attachments: Attachment[];
   capsuleFileId: number | null;
+  trailerFileId: number | null;
   images: Attachment[];
   onReorder: (ordered: Attachment[]) => void | Promise<void>;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
   onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
+  onTrailerChange: (id: number | null) => void | Promise<void>;
   onView: (index: number) => void;
 }) {
   /**
@@ -486,11 +502,13 @@ function AttachmentList({
           <AttachmentCard
             attachment={attachment}
             isCapsule={attachment.id === capsuleFileId}
+            isTrailer={attachment.id === trailerFileId}
             galleryIndex={images.findIndex((image) => image.id === attachment.id)}
             onRename={onRename}
             onRetype={onRetype}
             onRemove={onRemove}
             onCapsuleChange={onCapsuleChange}
+            onTrailerChange={onTrailerChange}
             onView={onView}
           />
         </li>
@@ -502,20 +520,24 @@ function AttachmentList({
 function AttachmentCard({
   attachment,
   isCapsule,
+  isTrailer,
   galleryIndex,
   onRename,
   onRetype,
   onRemove,
   onCapsuleChange,
+  onTrailerChange,
   onView,
 }: {
   attachment: Attachment;
   isCapsule: boolean;
+  isTrailer: boolean;
   galleryIndex: number;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
   onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
+  onTrailerChange: (id: number | null) => void | Promise<void>;
   onView: (index: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -533,7 +555,16 @@ function AttachmentCard({
         </button>
       )}
 
-      {attachment.kind !== 'image' && (
+      {/* La bande-annonce s'affiche à côté de son libellé, comme une image : une
+          carte qui n'en montre que le nom ne dit pas laquelle c'est. Le lecteur
+          reste en pause — la jouer, c'est le rôle de la vue store. */}
+      {attachment.kind === 'trailer' && attachment.file_url && (
+        <span className="attachment__thumb attachment__thumb--trailer">
+          <TrailerMedia url={attachment.file_url} autoPlay={false} />
+        </span>
+      )}
+
+      {attachment.kind !== 'image' && attachment.kind !== 'trailer' && (
         <span className="attachment__icon" title={describe(attachment)}>
           {attachment.kind === 'link' ? (
             <LinkIcon type={attachment.link_type} />
@@ -553,6 +584,7 @@ function AttachmentCard({
             onSave={(label) => onRename(attachment, label)}
           />
           {isCapsule && <span className="attachment__flag">capsule</span>}
+          {isTrailer && <span className="attachment__flag">bande-annonce</span>}
         </div>
 
         <p className="attachment__meta">
@@ -614,6 +646,16 @@ function AttachmentCard({
           </button>
         )}
 
+        {attachment.kind === 'trailer' && (
+          <button
+            type="button"
+            className={`attachment__action ${isTrailer ? 'is-active' : ''}`}
+            onClick={() => void onTrailerChange(isTrailer ? null : attachment.id)}
+          >
+            {isTrailer ? 'Retirer la bande-annonce' : 'Définir comme bande-annonce'}
+          </button>
+        )}
+
         {attachment.file_url && attachment.kind !== 'markdown' && (
           <a className="attachment__action" href={attachment.file_url} download>
             Télécharger
@@ -644,8 +686,12 @@ function describe(attachment: Attachment): string {
   }
 
   const size = formatSize(attachment.size_bytes);
-  const kind = { image: 'Image', markdown: 'Markdown', file: 'Fichier', link: 'Lien' }[
-    attachment.kind
-  ];
+  const kind = {
+    image: 'Image',
+    trailer: 'Bande-annonce',
+    markdown: 'Markdown',
+    file: 'Fichier',
+    link: 'Lien',
+  }[attachment.kind];
   return size ? `${kind} · ${size}` : kind;
 }

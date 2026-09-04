@@ -1,5 +1,5 @@
-import { FAMILIES, STATUSES } from './types';
-import type { Family, IdeaFilters, Sort, Status } from './types';
+import { STATUSES } from './types';
+import type { IdeaFilters, Sort, Status } from './types';
 
 /**
  * Les filtres du catalogue vivent dans l'URL : un catalogue filtré se met en
@@ -21,7 +21,10 @@ export function filtersFromSearch(search: string): IdeaFilters {
 
   return {
     wishlisted: params.get('wishlisted') === 'true' ? true : undefined,
-    family: (FAMILIES as readonly string[]).includes(family) ? (family as Family) : '',
+    // La famille n'est plus une énumération connue du front : c'est un slug de
+    // la table `families`. Un slug disparu ne filtre simplement rien, et le
+    // catalogue le dira plutôt que de faire semblant.
+    family: /^[a-z0-9-]{1,80}$/.test(family) ? family : '',
     status: (STATUSES as readonly string[]).includes(status) ? (status as Status) : '',
     minScore: /^[0-5]$/.test(minScore) ? Number(minScore) : '',
     sort: (SORTS as string[]).includes(sort) ? (sort as Sort) : 'updated',

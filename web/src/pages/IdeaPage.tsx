@@ -4,9 +4,10 @@ import { api, ApiError } from '../api';
 import { Attachments } from '../components/Attachments';
 import { formatDate, formatDateTime, formatPrice } from '../components/badges';
 import { EditableText } from '../components/EditableText';
+import { useFamilies } from '../families';
 import { Link, navigate } from '../router';
-import { FAMILIES, FAMILY_LABELS, STATUS_LABELS, STATUSES } from '../types';
-import type { Family, Idea, IdeaPatch, Status, Verdict } from '../types';
+import { STATUS_LABELS, STATUSES } from '../types';
+import type { Idea, IdeaPatch, Status, Verdict } from '../types';
 
 export function IdeaPage({ slug }: { slug: string }) {
   const [idea, setIdea] = useState<Idea | null>(null);
@@ -14,6 +15,7 @@ export function IdeaPage({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { families } = useFamilies();
   const savedTimer = useRef<number | undefined>(undefined);
   /**
    * Le slug de l'idée en mémoire. Renommer une idée change l'URL — donc la prop
@@ -176,6 +178,9 @@ export function IdeaPage({ slug }: { slug: string }) {
             />
           </Field>
 
+          {/* Le champ « GIF » décrit le moment ; la bande-annonce le montre. Le
+              texte devient le sous-titre du lecteur sur la vue store, et reste
+              la carte de tête quand aucune bande-annonce n'est déposée. */}
           <Field label="Le GIF" hint="Le moment clipable de 10 secondes.">
             <EditableText
               label="la description du GIF"
@@ -201,10 +206,17 @@ export function IdeaPage({ slug }: { slug: string }) {
           <Attachments
             slug={idea.slug}
             capsuleFileId={idea.capsule_file_id}
+            trailerFileId={idea.trailer_file_id}
             onCapsuleChange={(capsule_file_id) => save({ capsule_file_id })}
+            onTrailerChange={(trailer_file_id) => save({ trailer_file_id })}
             onCapsuleLost={() =>
               setIdea((current) =>
                 current ? { ...current, capsule_file_id: null, capsule_url: null } : current,
+              )
+            }
+            onTrailerLost={() =>
+              setIdea((current) =>
+                current ? { ...current, trailer_file_id: null, trailer_url: null } : current,
               )
             }
           />
@@ -231,16 +243,28 @@ export function IdeaPage({ slug }: { slug: string }) {
               </select>
             </Row>
 
+            <Row label="Bande-annonce">
+              <span className="idea__meta">
+                {idea.trailer_url ? 'Définie' : 'Aucune'}
+              </span>
+            </Row>
+
             <Row label="Famille">
               <select
                 className="select"
                 value={idea.family}
                 aria-label="Famille"
-                onChange={(event) => void save({ family: event.target.value as Family })}
+                onChange={(event) => void save({ family: event.target.value })}
               >
-                {FAMILIES.map((family) => (
-                  <option key={family} value={family}>
-                    {FAMILY_LABELS[family]}
+                {/* Une famille supprimée ou renommée pendant que l'onglet était
+                    ouvert : on garde l'option pour ne pas afficher une autre
+                    famille que celle réellement enregistrée. */}
+                {!families.some((family) => family.slug === idea.family) && (
+                  <option value={idea.family}>{idea.family}</option>
+                )}
+                {families.map((family) => (
+                  <option key={family.slug} value={family.slug}>
+                    {family.label}
                   </option>
                 ))}
               </select>

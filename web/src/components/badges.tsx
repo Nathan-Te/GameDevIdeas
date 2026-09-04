@@ -1,5 +1,5 @@
-import { FAMILY_LABELS, STATUS_LABELS } from '../types';
-import type { Family, Status } from '../types';
+import { STATUS_LABELS } from '../types';
+import type { Status } from '../types';
 
 export function StatusBadge({ status }: { status: Status }) {
   return (
@@ -7,8 +7,12 @@ export function StatusBadge({ status }: { status: Status }) {
   );
 }
 
-export function FamilyTag({ family }: { family: Family }) {
-  return <span className="badge badge--family">{FAMILY_LABELS[family] ?? family}</span>;
+/**
+ * Le libellé est passé par l'appelant : les familles vivent en base depuis le
+ * lot 4, un composant d'affichage n'a pas à aller les chercher.
+ */
+export function FamilyTag({ label }: { label: string }) {
+  return <span className="badge badge--family">{label}</span>;
 }
 
 /** Score courant, ou un tiret discret si l'idée n'a jamais été jugée. */
