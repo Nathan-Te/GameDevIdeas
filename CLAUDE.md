@@ -24,14 +24,16 @@ Reprises telles quelles de la section 8 du seed :
 
 ```bash
 npm install                  # une seule fois, à la racine (workspaces npm)
-npm run dev                  # API Fastify (3000) + Vite (5173) en parallèle, proxy /api
+npm run dev                  # API Fastify (3000) + Vite (5173) en parallèle, proxy /api et /files
 npm test                     # tests node:test de l'API
 npm run build                # build du front dans web/dist
 npm run migrate              # applique les migrations en attente sans démarrer le serveur
 docker compose up --build    # l'application complète sur http://localhost:3000
 ```
 
-En développement, on travaille sur `http://localhost:5173` : Vite sert le front et proxifie `/api` vers Fastify. En production, Fastify sert `web/dist` en statique avec repli SPA.
+En développement, on travaille sur `http://localhost:5173` : Vite sert le front et proxifie `/api` **et `/files`** vers Fastify. En production, Fastify sert `web/dist` en statique avec repli SPA.
+
+**Toute route servie par Fastify doit être ajoutée au proxy de `web/vite.config.ts`.** Sinon Vite répond son propre `index.html` — la route a l'air de marcher, elle renvoie 200, et c'est du HTML. Un test le vérifie (`server/test/files.test.js`).
 
 Node 20 ou plus est requis (`node:test`, Fastify 5, Vite 6) ; le développement se fait sur Node 24 LTS, la même version que le conteneur.
 

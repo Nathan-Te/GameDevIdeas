@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-Le front est sur <http://localhost:5173> (Vite), l'API sur le port 3000 ; Vite proxifie `/api` vers Fastify, donc les mêmes URL qu'en production.
+Le front est sur <http://localhost:5173> (Vite), l'API sur le port 3000 ; Vite proxifie `/api` et `/files` vers Fastify, donc les mêmes URL qu'en production.
 
 ```bash
 npm test      # tests de l'API (node:test)

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 /**
  * `/files/*` sert les fichiers utilisateur. Ce fichier vérifie surtout ce qu'il
@@ -116,6 +117,26 @@ test('la traversée de chemin est refusée sous toutes ses écritures', async (t
       `${url} a répondu ${res.statusCode} avec un corps inattendu`,
     );
   }
+});
+
+test('le serveur de développement proxifie `/files` autant que `/api`', async () => {
+  // Régression : le proxy Vite ne couvrait que `/api`. En développement, une
+  // image attachée et un markdown recevaient donc l'`index.html` de Vite —
+  // image cassée, et la page d'accueil affichée dans la carte markdown. Le bug
+  // n'existait qu'à partir de `localhost:5173`, invisible en production où
+  // Fastify sert les deux ; d'où ce test, qui lit la configuration elle-même.
+  const config = readFileSync(
+    fileURLToPath(new URL('../../web/vite.config.ts', import.meta.url)),
+    'utf8',
+  );
+
+  const proxied = [...config.matchAll(/'(\/[a-z]+)':\s*\{\s*target/g)].map((m) => m[1]);
+
+  assert.deepEqual(
+    proxied.sort(),
+    ['/api', '/files'],
+    'toute route servie par Fastify doit être proxifiée par Vite',
+  );
 });
 
 test('un dossier ne se liste pas', async (t) => {

@@ -207,6 +207,19 @@ export const api = {
     if (!response.ok) {
       throw new ApiError(response.status, 'not_found', 'Fichier introuvable.');
     }
+
+    // Fastify sert un `.md` en `text/markdown`. Recevoir du HTML ici signifie
+    // qu'on a parlé à autre chose que `/files/*` — typiquement un serveur de
+    // développement qui ne proxifie pas `/files` et répond son `index.html`.
+    // Sans ce garde-fou, la page d'accueil s'afficherait dans la carte.
+    if (/html/i.test(response.headers.get('content-type') ?? '')) {
+      throw new ApiError(
+        response.status,
+        'unexpected_html',
+        '`/files/` a répondu une page HTML au lieu du fichier — le proxy de développement ne couvre pas `/files`.',
+      );
+    }
+
     return response.text();
   },
 };

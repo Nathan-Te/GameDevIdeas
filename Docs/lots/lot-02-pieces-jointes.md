@@ -1,6 +1,6 @@
 # Lot 2 — Pièces jointes
 
-Livré le 3 septembre 2026.
+Livré le 3 septembre 2026. Correctif du 4 septembre 2026 : voir « Le défaut trouvé après livraison » en fin de document.
 
 Objectif du lot : une idée reçoit des images, des markdown, des fichiers quelconques et des liens typés ; une image attachée devient la capsule ; un markdown attaché se lit rendu dans la page. Pas de vue Steam, pas d'interface de corbeille (lot 3).
 
@@ -225,3 +225,24 @@ Prérequis : `npm install` à la racine (deux nouvelles dépendances front, une 
 
 - [ ] À la largeur d'un téléphone, les cartes de pièces jointes passent en colonne et les actions sous le libellé, sans défilement horizontal.
 - [ ] La visionneuse reste utilisable, boutons compris.
+
+---
+
+## 6. Le défaut trouvé après livraison
+
+**Symptôme.** Sur `localhost:5173`, aucune image attachée ne s'affichait — ni en vignette, ni en capsule, ni dans la visionneuse — et « Lire » sur un markdown affichait le code source de la page d'accueil au lieu du fichier.
+
+**Cause.** `web/vite.config.ts` ne proxifiait que `/api`. `/files/*` n'y était pas. Vite, ne connaissant pas cette adresse, répondait son propre `index.html` : un `200` avec du `text/html`. Une balise `<img>` ne peut rien en faire, et le markdown affichait donc le `<script src="/@vite/client">` de Vite.
+
+**Pourquoi les tests ne l'ont pas vu.** Ils portent sur Fastify, qui sert `/files/*` correctement — c'est ce que vérifie `files.test.js`, et il avait raison. Le trou était dans le serveur de développement, une couche que la suite ne traversait pas.
+
+**Pourquoi la vérification manuelle ne l'a pas vu.** Elle a été faite sur le front construit servi par Fastify, c'est-à-dire en configuration de production, où les deux routes viennent du même serveur. Or `CLAUDE.md` dit noir sur blanc qu'on travaille sur `localhost:5173`. Le bon réflexe était de vérifier dans la configuration où Nathan travaille, pas seulement dans celle où le code est déployé.
+
+**Correctif.**
+
+1. `/files` ajouté au proxy de `web/vite.config.ts`.
+2. `api.fetchText` refuse désormais une réponse `text/html` et affiche un message qui nomme la cause, plutôt que de rendre la page reçue. Un futur trou de proxy se dira au lieu de s'afficher.
+3. `files.test.js` lit `web/vite.config.ts` et exige que le proxy couvre exactement `/api` et `/files`. Vérifié en retirant la ligne : le test tombe.
+4. `CLAUDE.md` porte la règle : toute route servie par Fastify doit être ajoutée au proxy Vite.
+
+**Vérifié en mode développement** (Vite + Fastify séparés, comme `npm run dev`) : vignette décodée en 640 × 360, visionneuse ouverte sur la grande image, markdown rendu avec son tableau, `/files/*.png` renvoyant `image/png` et `/files/*.md` renvoyant `text/markdown`.
