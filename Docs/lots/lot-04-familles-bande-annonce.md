@@ -22,7 +22,7 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 - **`PATCH /api/ideas/:slug`** accepte `trailer_file_id` — refusé si la pièce n'est pas un `trailer` de cette idée.
 - **`/files/*`** sert les médias jouables `inline` avec `Accept-Ranges: bytes`, honore les requêtes `Range` (206 + `Content-Range`, 416 hors bornes) et ignore un `Range` illisible.
 - **Page idée** : carte `trailer` avec son aperçu (lecteur en pause), bouton « Définir comme bande-annonce », marqueur sur la courante, ligne « Bande-annonce » dans la fiche.
-- **Page store** : la première position de la visionneuse joue la bande-annonce, en boucle et sans son, bouton de lecture par-dessus ; le champ `gif` devient le sous-titre sous le lecteur. Sans bande-annonce, on retombe sur la carte texte du lot 3b. La vignette du bandeau porte le pictogramme de lecture.
+- **Page store** : la première position de la visionneuse joue la bande-annonce, en boucle et sans son, avec sa barre de lecture — lecture/pause, position dans la vidéo, son — et un gros bouton central à l'arrêt. Le champ `gif` devient le sous-titre sous le lecteur. Sans bande-annonce, on retombe sur la carte texte du lot 3b. La vignette du bandeau porte le pictogramme de lecture.
 - **Catalogue** : au survol (et au focus clavier) d'une carte qui a une bande-annonce, elle remplace la capsule et se joue ; au repos, la capsule, avec un petit pictogramme de lecture qui annonce qu'il y a quelque chose à voir.
 
 ### Tests (`node:test`) — 96 → 121, tous verts
@@ -48,7 +48,9 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 
 **Deux limites de taille, appliquées après écriture.** `@fastify/multipart` ne connaît qu'une limite globale et ne sait pas quel `kind` arrive avant d'avoir lu le nom du fichier. La limite déclarée est donc la plus haute des deux, et la limite fine est vérifiée sur la taille réelle. Un fichier refusé est effacé comme tous ceux de la requête — le nettoyage du lot 2 couvrait déjà ce cas.
 
-**Un composant, un seul, sait qu'un GIF n'est pas une vidéo.** `web/src/components/Trailer.tsx`. Partout ailleurs on passe une URL. Le bouton de lecture n'existe que sur une vidéo : on ne met pas un GIF en pause, et un bouton mort sur une page qui prétend être un magasin se remarque plus que son absence.
+**Un composant, un seul, sait qu'un GIF n'est pas une vidéo.** `web/src/components/Trailer.tsx`. Partout ailleurs on passe une URL. La barre de lecture n'existe que sur une vidéo : un GIF n'a ni son, ni durée, ni position, et des contrôles morts sur une page qui prétend être un magasin se remarquent plus que leur absence.
+
+**La barre de lecture est écrite à la main, pas déléguée à `controls`.** Les contrôles natifs sont ceux du navigateur, reconnaissables au premier coup d'œil : au milieu d'un photomontage, ils le trahiraient autant qu'un logo. Ses couleurs vivent donc dans `steam.css` avec le reste du décor, jamais dans les tokens. L'état React est la source et l'élément vidéo suit — on n'écoute pas `volumechange`, dont l'aller-retour se stabilise mal : le lecteur repartait à 100 % dès que les métadonnées arrivaient du cache avant que React n'ait branché son écouteur. Chaque bande-annonce démarre muette à 50 %.
 
 **La liste des familles est chargée une fois et partagée** (`web/src/families.ts` : cache module + abonnement). Quatre vues en ont besoin ; la recharger à chaque montage ferait clignoter les sélecteurs à chaque navigation. Pas de bibliothèque d'état global, comme le reste du front.
 
@@ -91,7 +93,10 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 - [ ] Déposer un `.gif` sur une idée : la carte est « Bande-annonce », pas « Image », et montre son aperçu.
 - [ ] Déposer un `.mp4` et un `.webm` : même chose, avec un lecteur en pause dans la carte.
 - [ ] « Définir comme bande-annonce » : le marqueur apparaît, la ligne « Bande-annonce » de la fiche passe à « Définie ».
-- [ ] Page store : la bande-annonce joue en boucle et sans son en première position, le bouton de lecture la met en pause et la relance, et le texte du champ « GIF » est sous le lecteur.
+- [ ] Page store : la bande-annonce joue en boucle et sans son en première position, et le texte du champ « GIF » est sous le lecteur.
+- [ ] La barre apparaît au survol, reste affichée à l'arrêt : pause et relance, position qui avance, durée juste.
+- [ ] Cliquer dans la timeline se déplace dans la vidéo, y compris en arrière — c'est ce que `Range` rend possible.
+- [ ] Le bouton de son rend l'audio à mi-volume ; le curseur le règle, et à zéro il coupe.
 - [ ] La vignette de gauche du bandeau porte le pictogramme de lecture ; les captures, non.
 - [ ] Retirer la bande-annonce : la vue store retombe sur la carte texte du lot 3b.
 - [ ] Supprimer la pièce jointe qui servait de bande-annonce : la fiche repasse à « Aucune » sans rien casser.

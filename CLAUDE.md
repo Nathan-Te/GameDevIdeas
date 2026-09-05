@@ -82,7 +82,7 @@ Côté front, cinq vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/i
 
 `/familles` édite la liste des familles : libellé, étiquettes store en pilules, fonctionnalités en cases, ordre à la poignée. Le sélecteur de famille de la page idée et le filtre du catalogue lisent cette liste, jamais une énumération du code.
 
-`/idees/:slug/steam` est une réplique fidèle du store de bureau, sans logo ni marque ; seul le bouton de liste de souhaits est actif. Le reste — enchaîner les idées en respectant les filtres, revenir à l'édition — vit dans une fine barre de service au-dessus de la maquette, hors du photomontage. Elle n'a pas de version mobile : elle s'éloigne (`zoom`) et se fait défiler.
+`/idees/:slug/steam` est une réplique fidèle du store de bureau, sans logo ni marque ; seuls le bouton de liste de souhaits et le lecteur de bande-annonce sont actifs. Ce lecteur a sa propre barre — lecture, position, son — écrite à la main plutôt que déléguée à `controls` : les contrôles natifs sont ceux du navigateur, reconnaissables au premier coup d'œil, et trahiraient le photomontage autant qu'un logo. Se déplacer dans la vidéo repose sur les requêtes `Range` de `/files/*`. Le reste — enchaîner les idées en respectant les filtres, revenir à l'édition — vit dans une fine barre de service au-dessus de la maquette, hors du photomontage. Elle n'a pas de version mobile : elle s'éloigne (`zoom`) et se fait défiler.
 
 ## Plan en lots
 

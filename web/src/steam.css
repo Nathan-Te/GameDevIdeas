@@ -395,52 +395,170 @@
   background: #000;
 }
 
-/* Le bouton de lecture, posé par-dessus comme sur le magasin : au centre et
-   franc tant que la vidéo est en pause, discret en bas à gauche pendant la
-   lecture — là où se trouve la barre de contrôle qu'on n'imite pas. */
-.sp-trailer__playbtn {
+/* Le gros bouton central, à l'arrêt seulement : pendant la lecture, la barre du
+   bas suffit et un rond au milieu de l'image gênerait. */
+.sp-trailer__bigplay {
   position: absolute;
-  left: 16px;
-  bottom: 14px;
-  width: 40px;
-  height: 40px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #fff;
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
-  opacity: 0.55;
+  z-index: 2;
+}
+
+.sp-trailer__bigplay svg {
+  width: 26px;
+  height: 26px;
+  /* Un triangle centré paraît décalé à gauche : on le repousse optiquement. */
+  margin-left: 3px;
+}
+
+/* La barre de lecture. Elle se montre au survol et reste visible tant que la
+   vidéo est à l'arrêt : quand rien ne bouge, il faut voir de quoi la relancer. */
+.sp-trailer__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Le voile monte haut : la barre doit rester lisible par-dessus n'importe
+     quelle image, y compris une image claire. */
+  padding: 34px 14px 12px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0));
+  opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.sp-trailer--media:hover .sp-trailer__playbtn {
+.sp-trailer--media:hover .sp-trailer__bar,
+.sp-trailer--media.is-paused .sp-trailer__bar,
+.sp-trailer__bar:focus-within {
   opacity: 1;
 }
 
-.sp-trailer__playbtn.is-paused {
-  left: 50%;
-  top: 50%;
-  bottom: auto;
-  width: 68px;
-  height: 68px;
-  transform: translate(-50%, -50%);
-  font-size: 24px;
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.55);
-  border-width: 2px;
+.sp-trailer__ctrl {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: #c7d5e0;
+  cursor: pointer;
 }
 
+.sp-trailer__ctrl svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.sp-trailer__ctrl:hover {
+  color: #fff;
+}
+
+.sp-trailer__time {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #b0c0cd;
+}
+
+/* Les deux curseurs partagent leur dessin : un rail sombre, la partie parcourue
+   en bleu de magasin, et une pastille discrète. `--filled` est posé en style
+   inline par le composant — c'est la seule façon de peindre la progression dans
+   le rail sans dessiner une seconde barre par-dessus. */
+.sp-trailer__seek,
+.sp-trailer__volume {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    #67c1f5 0%,
+    #67c1f5 var(--filled, 0%),
+    rgba(255, 255, 255, 0.22) var(--filled, 0%),
+    rgba(255, 255, 255, 0.22) 100%
+  );
+  cursor: pointer;
+  margin: 0;
+}
+
+.sp-trailer__seek {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-trailer__seek:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sp-trailer__volume {
+  flex: 0 0 68px;
+}
+
+.sp-trailer__seek::-webkit-slider-thumb,
+.sp-trailer__volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+}
+
+.sp-trailer__seek::-moz-range-thumb,
+.sp-trailer__volume::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+}
+
+.sp-trailer__seek:focus-visible,
+.sp-trailer__volume:focus-visible,
+.sp-trailer__ctrl:focus-visible,
+.sp-trailer__bigplay:focus-visible {
+  outline: 2px solid #67c1f5;
+  outline-offset: 2px;
+}
+
+/* L'étiquette « Bande-annonce » occupe le même bas d'image que la barre : elle
+   lui cède la place au survol, sinon les deux se liraient l'une sur l'autre. */
 .sp-trailer--media .sp-trailer__tag {
   position: relative;
   z-index: 1;
   align-self: flex-end;
-  padding: 6px 12px;
+  padding: 6px 12px 10px;
   color: #c7d5e0;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.55), transparent);
   width: 100%;
   text-align: right;
+  transition: opacity 0.15s ease;
+}
+
+.sp-trailer--media:hover .sp-trailer__tag,
+.sp-trailer--media.is-paused .sp-trailer__tag,
+.sp-trailer--media:focus-within .sp-trailer__tag {
+  opacity: 0;
 }
 
 /* Le champ « GIF » sous le lecteur : il décrit ce qu'on regarde, il ne le
