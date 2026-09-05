@@ -1237,3 +1237,96 @@
     zoom: 0.45;
   }
 }
+
+/*
+ * Le formulaire d'avis de l'invité et la marque « votre avis » (lot 7).
+ *
+ * Ils sont dans le photomontage, donc leurs couleurs sont celles du magasin et
+ * vivent ici, sous `.sp-mock`, comme le reste de cette feuille. Aucun token
+ * Vitrine n'y entre — c'est la règle assumée de `steam.css`.
+ */
+.sp-mock .guest-review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: var(--sp-veil);
+  border-left: 3px solid var(--sp-blue);
+}
+
+.sp-mock .guest-review__title {
+  margin: 0;
+  color: var(--sp-text-2);
+  font-size: 14px;
+}
+
+.sp-mock .guest-review__scores {
+  display: flex;
+  gap: 6px;
+}
+
+.sp-mock .guest-review__score {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--sp-blue-veil);
+  background: transparent;
+  color: var(--sp-text);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.sp-mock .guest-review__score.is-on {
+  background: var(--sp-blue-veil);
+  border-color: var(--sp-blue);
+  color: var(--sp-blue);
+  font-weight: 700;
+}
+
+.sp-mock .guest-review__note {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--sp-veil-2);
+  border: 1px solid var(--sp-blue-veil);
+  color: var(--sp-text);
+  border-radius: 2px;
+  resize: vertical;
+  font: inherit;
+}
+
+.sp-mock .guest-review__note:focus {
+  outline: none;
+  border-color: var(--sp-blue);
+}
+
+.sp-mock .guest-review__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sp-mock .guest-review__done {
+  color: var(--sp-blue);
+  font-size: 13px;
+}
+
+.sp-mock .guest-review__error {
+  color: var(--sp-negative);
+  font-size: 13px;
+}
+
+/* L'avis du visiteur, repéré parmi les autres. */
+.sp-mock .sp-review.is-own {
+  background: var(--sp-veil);
+}
+
+.sp-mock .sp-review__mine {
+  display: block;
+  margin-top: 4px;
+  color: var(--sp-blue);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+

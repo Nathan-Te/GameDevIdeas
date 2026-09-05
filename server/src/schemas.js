@@ -31,7 +31,15 @@ export const STATUSES = [
   'publie',
 ];
 
-export const SORTS = ['updated', 'created', 'score', 'title'];
+export const SORTS = [
+  'updated',
+  'created',
+  'score',
+  'title',
+  /** Moyenne des avis d'amis, puis nombre de listes de souhaits reçues (lot 7). */
+  'friends-score',
+  'friends-wishlist',
+];
 
 const text = (maxLength) => ({ type: 'string', maxLength });
 
@@ -200,5 +208,80 @@ export const backupNameParams = {
   required: ['name'],
   properties: {
     name: { type: 'string', minLength: 5, maxLength: 200, pattern: '^[^/\\\\]+\\.tgz$' },
+  },
+};
+
+// --- Partage public et avis d'amis (lot 7) -----------------------------------
+
+export const shareIdParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'integer', minimum: 1 } },
+};
+
+export const reviewIdParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'integer', minimum: 1 } },
+};
+
+const ideaSlugList = {
+  type: 'array',
+  maxItems: 500,
+  items: { type: 'string', minLength: 1, maxLength: 100 },
+};
+
+export const createShareBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    label: text(120),
+    /** La sélection, **dans l'ordre** : c'est l'ordre dans lequel on scrolle. */
+    idea_slugs: ideaSlugList,
+    /** ISO, ou `null` pour un lien sans échéance. */
+    expires_at: { type: ['string', 'null'], maxLength: 40 },
+    reviews_visible: { type: 'boolean' },
+  },
+};
+
+export const patchShareBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    ...createShareBody.properties,
+    /** `true` révoque, `false` rouvre. Un lien révoqué répond 404, comme un inconnu. */
+    revoked: { type: 'boolean' },
+  },
+};
+
+/**
+ * L'identifiant que le navigateur du visiteur tire au hasard. Ce n'est pas un
+ * compte : il ne sert qu'à laisser quelqu'un corriger **son** avis.
+ */
+const visitorId = { type: 'string', pattern: '^[A-Za-z0-9_-]{8,64}$' };
+
+/** Le formulaire d'avis. 40 caractères de prénom, 2000 de commentaire. */
+export const guestReviewBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['slug', 'visitor_id', 'score'],
+  properties: {
+    slug: { type: 'string', minLength: 1, maxLength: 100 },
+    visitor_id: visitorId,
+    author_name: text(40),
+    score: { type: 'integer', minimum: 0, maximum: 5 },
+    note: text(2000),
+  },
+};
+
+export const guestWishlistBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['slug', 'visitor_id', 'wishlisted'],
+  properties: {
+    slug: { type: 'string', minLength: 1, maxLength: 100 },
+    visitor_id: visitorId,
+    wishlisted: { type: 'boolean' },
   },
 };

@@ -15,7 +15,14 @@ export const STATUSES = [
 export const LINK_TYPES = ['trello', 'asset-store', 'git', 'steam', 'video', 'autre'] as const;
 
 export type Status = (typeof STATUSES)[number];
-export type Sort = 'updated' | 'created' | 'score' | 'title';
+export type Sort =
+  | 'updated'
+  | 'created'
+  | 'score'
+  | 'title'
+  /** Moyenne des avis d'amis, puis nombre de listes de souhaits reçues (lot 7). */
+  | 'friends-score'
+  | 'friends-wishlist';
 export type LinkType = (typeof LINK_TYPES)[number];
 export type AttachmentKind = 'image' | 'markdown' | 'file' | 'link' | 'trailer';
 
@@ -68,6 +75,8 @@ export const SORT_LABELS: Record<Sort, string> = {
   created: 'Création',
   score: 'Score',
   title: 'Titre',
+  'friends-score': 'Note des amis',
+  'friends-wishlist': 'Souhaits des amis',
 };
 
 export const LINK_TYPE_LABELS: Record<LinkType, string> = {
@@ -140,10 +149,115 @@ export interface Idea {
    * seul état qu'un clic dans la vue store peut changer.
    */
   wishlisted_at: string | null;
+  /**
+   * Les avis d'amis, agrégés. Deux colonnes du catalogue et deux tris — jamais
+   * mêlés au verdict : ce sont deux jugements différents.
+   */
+  friend_review_count: number;
+  /** Moyenne sur 5 des avis d'amis, `null` tant que personne n'a noté. */
+  friend_score_avg: number | null;
+  /** Combien d'amis l'ont mise dans **leur** liste de souhaits. */
+  friend_wishlist_count: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
   current_verdict: Verdict | null;
+}
+
+/**
+ * Ce dont la maquette store a besoin, et rien de plus.
+ *
+ * C'est exactement ce qu'un invité reçoit : ni verdict, ni liste de souhaits de
+ * Nathan. Le type le dit, le serveur le garantit (`publicIdea`).
+ */
+export type StoreIdea = Pick<
+  Idea,
+  | 'slug'
+  | 'title'
+  | 'tagline'
+  | 'pitch'
+  | 'gif'
+  | 'price_cents'
+  | 'family'
+  | 'status'
+  | 'competition'
+  | 'capsule_file_id'
+  | 'capsule_url'
+  | 'trailer_file_id'
+  | 'leading_trailer_id'
+  | 'trailer_url'
+  | 'updated_at'
+>;
+
+// --- Partage et avis d'amis (lot 7) ------------------------------------------
+
+/**
+ * Un avis d'ami. **Ce n'est pas un `Verdict`** : deux types distincts pour deux
+ * tables distinctes, pour qu'aucune fonction ne puisse recevoir l'un en croyant
+ * l'autre.
+ */
+export interface StoreReview {
+  id: number;
+  idea_slug?: string;
+  author_name: string;
+  score: number;
+  note: string;
+  created_at: string;
+  updated_at: string | null;
+  /** De quelle sélection vient l'avis. Vu par Nathan seulement. */
+  share_label?: string | null;
+  share_id?: number | null;
+  /** L'avis du visiteur qui regarde : lui seul peut le corriger. */
+  own?: boolean;
+}
+
+/** Une sélection partagée, telle que `/api/shares` la sert. */
+export interface Share {
+  id: number;
+  token: string;
+  label: string;
+  reviews_visible: boolean;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  /** Ni révoquée, ni expirée : le seul état qui ouvre le lien. */
+  active: boolean;
+  idea_count: number;
+  visitor_count: number;
+  review_count: number;
+  wishlist_count: number;
+  ideas: Idea[];
+}
+
+export interface SharePatch {
+  label?: string;
+  idea_slugs?: string[];
+  expires_at?: string | null;
+  reviews_visible?: boolean;
+  revoked?: boolean;
+}
+
+/** Ce que `GET /api/share/:token` sert à un invité. */
+export interface GuestShare {
+  share: { label: string; reviews_visible: boolean };
+  developer_name: string;
+  ideas: StoreIdea[];
+  summary: {
+    reviews: { idea_slug: string; title: string; score: number; note: string | null }[];
+    wishlisted: { idea_slug: string; title: string }[];
+  };
+}
+
+/** Ce que `GET /api/share/:token/ideas/:slug` sert à un invité. */
+export interface GuestIdeaPage {
+  share: { label: string; reviews_visible: boolean };
+  developer_name: string;
+  idea: StoreIdea;
+  family: Family | null;
+  attachments: Attachment[];
+  reviews: StoreReview[];
+  my_review: StoreReview | null;
+  wishlisted: boolean;
 }
 
 /** Champs de l'idée qu'un PATCH peut écrire. */

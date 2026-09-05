@@ -63,7 +63,10 @@ const SELECT_IDEA = `
          c.path       AS capsule_path,
          t.id         AS leading_trailer_id,
          t.path       AS trailer_path,
-         (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count
+         (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count,
+         (SELECT COUNT(*) FROM reviews r WHERE r.idea_id = i.id)        AS friend_review_count,
+         (SELECT AVG(r.score) FROM reviews r WHERE r.idea_id = i.id)    AS friend_score_avg,
+         (SELECT COUNT(*) FROM share_wishlists w WHERE w.idea_id = i.id) AS friend_wishlist_count
   FROM ideas i
   ${CURRENT_VERDICT_JOIN}
   ${CAPSULE_JOIN}
@@ -108,6 +111,20 @@ export function serializeIdea(row) {
     trailer_url: fileUrl(row.trailer_path),
     /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
     attachment_count: row.attachment_count ?? 0,
+    /**
+     * Les avis d'amis, agrégés — **et jamais mêlés au verdict**. Ce sont deux
+     * colonnes du catalogue et deux tris, pas une note unique : additionner le
+     * jugement de Nathan et celui de ses amis ne donnerait le jugement de
+     * personne.
+     */
+    friend_review_count: row.friend_review_count ?? 0,
+    /** Moyenne sur 5, arrondie au dixième. `null` tant qu'aucun ami n'a noté. */
+    friend_score_avg:
+      row.friend_score_avg === null || row.friend_score_avg === undefined
+        ? null
+        : Math.round(row.friend_score_avg * 10) / 10,
+    /** Combien d'amis l'ont mise dans **leur** liste de souhaits. */
+    friend_wishlist_count: row.friend_wishlist_count ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at,
@@ -157,6 +174,11 @@ export function listIdeas(
     // Une idée sans verdict n'a pas de score : elle passe en fin de liste.
     score: 'v.score IS NULL, v.score DESC, i.updated_at DESC',
     title: 'i.title COLLATE NOCASE ASC, i.id ASC',
+    // Les deux tris du lot 7 : c'est le classement que Nathan cherche. Une idée
+    // que personne n'a notée n'a pas de moyenne — elle passe en fin de liste,
+    // comme une idée sans verdict pour le tri par score.
+    'friends-score': 'friend_score_avg IS NULL, friend_score_avg DESC, friend_review_count DESC, i.updated_at DESC',
+    'friends-wishlist': 'friend_wishlist_count DESC, i.updated_at DESC, i.id DESC',
   }[sort] || 'i.updated_at DESC, i.id DESC';
 
   const rows = db

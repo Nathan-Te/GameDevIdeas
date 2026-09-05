@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   FAMILY_FEATURES,
+  friendReviewSummary,
+  friendScoreAverage,
   isRecommended,
   RELEASE_KIND,
   releaseDate,
@@ -177,4 +179,24 @@ test('la courte description colle l’accroche au pitch et tronque sur un mot en
   assert.ok(long.endsWith('…'));
   assert.ok(long.length <= 61);
   assert.ok(!long.includes('  '), 'la troncature ne doit pas couper au milieu d’un mot');
+});
+
+test('la moyenne des avis d’amis ignore le vide et arrondit au libellé le plus proche', () => {
+  assert.equal(friendScoreAverage([]), null);
+  assert.equal(friendScoreAverage(null), null);
+  assert.equal(friendScoreAverage([{ score: 2 }, { score: 4 }]), 3);
+
+  assert.equal(friendReviewSummary([]).tone, 'none');
+  assert.equal(friendReviewSummary([{ score: 5 }, { score: 5 }]).label, 'Extrêmement positives');
+  // 3,5 arrondit à 4 : « Très positives », comme un magasin qui n'affiche pas de décimale.
+  assert.equal(friendReviewSummary([{ score: 3 }, { score: 4 }]).label, 'Très positives');
+});
+
+test('un verdict n’entre jamais dans la moyenne des amis', () => {
+  // La fonction ne connaît que des scores : elle ne peut pas lire un verdict.
+  // Ce test fige l'interface — si un jour on lui passait une idée entière, il
+  // faudrait le réécrire, et c'est précisément le moment où il faut réfléchir.
+  const avis = [{ score: 1 }, { score: 1 }];
+  assert.equal(friendScoreAverage(avis), 1);
+  assert.equal(friendReviewSummary(avis).tone, 'negative');
 });

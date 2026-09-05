@@ -2,6 +2,8 @@ import { Backup } from './pages/Backup';
 import { Catalogue } from './pages/Catalogue';
 import { Families } from './pages/Families';
 import { IdeaPage } from './pages/IdeaPage';
+import { SharePage } from './pages/SharePage';
+import { Shares } from './pages/Shares';
 import { SteamPage } from './pages/SteamPage';
 import { Trash } from './pages/Trash';
 import { Link, useLocation } from './router';
@@ -17,6 +19,22 @@ export function App() {
   if (pathname === '/corbeille' || pathname === '/corbeille/') return <Trash />;
   if (pathname === '/familles' || pathname === '/familles/') return <Families />;
   if (pathname === '/sauvegarde' || pathname === '/sauvegarde/') return <Backup />;
+  if (pathname === '/partages' || pathname === '/partages/') return <Shares />;
+
+  /**
+   * La page invité. Elle est examinée avant les autres parce qu'elle est la
+   * seule que quelqu'un d'autre que Nathan puisse atteindre : le serveur ne
+   * sert la coquille de l'application, à un visiteur, que sous ce préfixe.
+   */
+  const shared = /^\/p\/([^/]+)(?:\/([^/]+))?\/?$/.exec(pathname);
+  if (shared) {
+    return (
+      <SharePage
+        token={decodeURIComponent(shared[1])}
+        slug={shared[2] ? decodeURIComponent(shared[2]) : null}
+      />
+    );
+  }
 
   const steam = /^\/idees\/([^/]+)\/steam\/?$/.exec(pathname);
   if (steam) return <SteamPage slug={decodeURIComponent(steam[1])} search={search} />;

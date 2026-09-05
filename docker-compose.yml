@@ -9,6 +9,12 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+      # Le point d'entrée public, publié **sur la boucle locale uniquement** :
+      # c'est Tailscale Funnel, qui tourne sur l'hôte, qui vient s'y brancher.
+      # Le publier sur toutes les interfaces exposerait l'instance au réseau
+      # local sans passer par Funnel — et sans que rien ne le dise.
+      # Décommenter en même temps que PUBLIC_PORT ci-dessous.
+      # - "127.0.0.1:3003:3003"
     volumes:
       # La base et les fichiers utilisateur survivent à toute reconstruction.
       - ./data/db:/app/data/db
@@ -25,6 +31,12 @@ services:
       DATA_BACKUPS_DIR: /app/data/backups
       SERVE_STATIC: "true"
       LOG_LEVEL: info
+      # Exposition publique (lot 7) — voir Docs/exposition-publique.md.
+      # En conteneur, le point d'entrée doit écouter sur toutes les interfaces
+      # du conteneur ; c'est la publication ci-dessus qui le restreint à la
+      # boucle locale de l'hôte.
+      # PUBLIC_PORT: "3003"
+      # PUBLIC_HOST: 0.0.0.0
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ideas').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s

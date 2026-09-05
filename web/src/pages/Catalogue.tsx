@@ -32,6 +32,7 @@ export function Catalogue() {
   // Le message laissé par une restauration réussie : elle finit ici, mais
   // l'écran qui l'a produite n'existe plus (voir `flash.ts`).
   const [flash] = useState(() => takeFlash());
+  const [friendColumns, setFriendColumns] = useState(() => rememberedFriendColumns());
   const { families } = useFamilies();
 
   const load = useCallback(async (active: IdeaFilters) => {
@@ -86,6 +87,14 @@ export function Catalogue() {
   const active = hasActiveFilters(filters);
   const search = searchFromFilters(filters);
 
+  /**
+   * Les deux colonnes du lot 7 sont **optionnelles** : elles ne disent rien
+   * tant qu'aucun ami n'a répondu, et une carte de catalogue qui affiche « — »
+   * partout est une carte plus bruyante qu'informative. Elles s'allument d'un
+   * clic, et le choix se retient d'une visite à l'autre.
+   */
+  const showFriends = friendColumns || Boolean(filters.sort?.startsWith('friends-'));
+
   return (
     <div className="page">
       <header className="page__header">
@@ -105,6 +114,9 @@ export function Catalogue() {
           <Link to="/corbeille" className="button button--ghost">
             Corbeille
             {trashed > 0 && <span className="button__count">{trashed}</span>}
+          </Link>
+          <Link to="/partages" className="button button--ghost">
+            Partages
           </Link>
           <Link to="/sauvegarde" className="button button--ghost">
             Sauvegarde
@@ -199,6 +211,19 @@ export function Catalogue() {
           <span>Liste de souhaits</span>
         </label>
 
+        {/* Ce que les amis en ont dit : deux colonnes de plus sur chaque carte. */}
+        <label className="filters__toggle">
+          <input
+            type="checkbox"
+            checked={friendColumns}
+            onChange={(event) => {
+              setFriendColumns(event.target.checked);
+              rememberFriendColumns(event.target.checked);
+            }}
+          />
+          <span>Avis des amis</span>
+        </label>
+
         {active && (
           <button
             type="button"
@@ -251,7 +276,7 @@ export function Catalogue() {
 
       <div className="grid">
         {(ideas ?? []).map((idea) => (
-          <IdeaCard key={idea.id} idea={idea} search={search} />
+          <IdeaCard key={idea.id} idea={idea} search={search} friends={showFriends} />
         ))}
       </div>
     </div>
@@ -267,7 +292,15 @@ export function Catalogue() {
  * lien, étendu à toute la carte par un `::after` ; « Voir la page » repasse
  * au-dessus par son empilement.
  */
-function IdeaCard({ idea, search }: { idea: Idea; search: string }) {
+function IdeaCard({
+  idea,
+  search,
+  friends,
+}: {
+  idea: Idea;
+  search: string;
+  friends: boolean;
+}) {
   const price = formatPrice(idea.price_cents);
   const title = idea.title || 'Sans titre';
   /**
@@ -335,7 +368,46 @@ function IdeaCard({ idea, search }: { idea: Idea; search: string }) {
           {price && <span className="card__price">{price}</span>}
           <ScoreBadge score={idea.current_verdict?.score ?? null} />
         </div>
+
+        {/* Les amis, à part du verdict et jamais confondus avec lui : le badge
+            de score est celui de Nathan, cette ligne est celle des autres. */}
+        {friends && (
+          <div className="card__friends">
+            <span title="Moyenne des avis d’amis">
+              ★ {idea.friend_score_avg === null ? '—' : idea.friend_score_avg}
+              <span className="card__friends-unit">
+                {idea.friend_review_count > 0 ? ` (${idea.friend_review_count})` : ''}
+              </span>
+            </span>
+            <span title="Mises en liste de souhaits par des amis">
+              ♡ {idea.friend_wishlist_count}
+            </span>
+          </div>
+        )}
       </div>
     </article>
   );
+}
+
+/**
+ * L'affichage des colonnes d'amis se retient dans le navigateur : c'est une
+ * préférence d'écran, pas un filtre — elle n'a donc rien à faire dans l'URL,
+ * qui sert à partager une liste, pas une mise en page.
+ */
+const FRIENDS_KEY = 'vitrine.catalogue.friends';
+
+function rememberedFriendColumns(): boolean {
+  try {
+    return window.localStorage.getItem(FRIENDS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberFriendColumns(value: boolean): void {
+  try {
+    window.localStorage.setItem(FRIENDS_KEY, value ? '1' : '0');
+  } catch {
+    /* stockage indisponible : la case retombera décochée au prochain passage */
+  }
 }

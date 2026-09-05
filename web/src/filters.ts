@@ -10,7 +10,15 @@ import type { IdeaFilters, Sort, Status } from './types';
  * sous les yeux, filtres et tri compris, et non le catalogue entier.
  */
 
-export const SORTS: Sort[] = ['updated', 'created', 'score', 'title'];
+export const SORTS: Sort[] = [
+  'updated',
+  'created',
+  'score',
+  'title',
+  // Le classement que le lot 7 cherche : ce que les amis en ont dit.
+  'friends-score',
+  'friends-wishlist',
+];
 
 export function filtersFromSearch(search: string): IdeaFilters {
   const params = new URLSearchParams(search);

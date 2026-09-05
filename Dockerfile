@@ -57,7 +57,9 @@ COPY --from=build /app/web/dist ./web/dist
 RUN mkdir -p /app/data/db /app/data/files /app/data/backups && chown -R node:node /app/data
 USER node
 
-EXPOSE 3000
+# 3000 : le port de Nathan. 3003 : le point d'entrée public du lot 7, ouvert
+# seulement si `PUBLIC_PORT` est défini — voir Docs/exposition-publique.md.
+EXPOSE 3000 3003
 
 # Les migrations en attente sont appliquées au démarrage par le serveur lui-même.
 CMD ["node", "server/src/index.js"]

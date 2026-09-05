@@ -7,11 +7,16 @@ import { EditableText } from '../components/EditableText';
 import { useFamilies } from '../families';
 import { Link, navigate } from '../router';
 import { STATUS_LABELS, STATUSES } from '../types';
-import type { Idea, IdeaPatch, Status, Verdict } from '../types';
+import type { Idea, IdeaPatch, Status, StoreReview, Verdict } from '../types';
 
 export function IdeaPage({ slug }: { slug: string }) {
   const [idea, setIdea] = useState<Idea | null>(null);
   const [verdicts, setVerdicts] = useState<Verdict[]>([]);
+  /**
+   * Les avis d'amis. Un état à part des verdicts, comme ils sont une table à
+   * part : les mêler ici serait la première marche vers les mêler ailleurs.
+   */
+  const [reviews, setReviews] = useState<StoreReview[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,11 +43,16 @@ export function IdeaPage({ slug }: { slug: string }) {
       try {
         setError(null);
         setMissing(false);
-        const [loaded, history] = await Promise.all([api.getIdea(slug), api.listVerdicts(slug)]);
+        const [loaded, history, friends] = await Promise.all([
+          api.getIdea(slug),
+          api.listVerdicts(slug),
+          api.listReviews(slug),
+        ]);
         if (cancelled) return;
         loadedSlug.current = loaded.slug;
         setIdea(loaded);
         setVerdicts(history);
+        setReviews(friends);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) setMissing(true);
@@ -242,6 +252,14 @@ export function IdeaPage({ slug }: { slug: string }) {
           />
 
           <VerdictSection verdicts={verdicts} onSubmit={addVerdict} />
+
+          <ReviewSection
+            reviews={reviews}
+            onDelete={async (id) => {
+              await api.deleteReview(id);
+              setReviews((current) => current.filter((review) => review.id !== id));
+            }}
+          />
         </main>
 
         <aside className="idea__aside">
@@ -447,6 +465,94 @@ function VerdictSection({
                 </time>
                 {verdict.note && <p className="verdict__note">{verdict.note}</p>}
               </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Les avis d'amis reçus par cette idée.
+ *
+ * Une section à part, sous les verdicts et jamais mêlée à eux : **un avis d'ami
+ * n'est pas un verdict**. Le verdict est le jugement de Nathan, daté, qu'on
+ * n'écrase jamais ; l'avis est celui de quelqu'un d'autre, qui peut le
+ * corriger. Les additionner donnerait une note qui n'est celle de personne.
+ *
+ * Le seul geste possible ici est la suppression : c'est de la modération, pas
+ * de l'édition — on ne réécrit pas ce qu'un ami a dit.
+ */
+function ReviewSection({
+  reviews,
+  onDelete,
+}: {
+  reviews: StoreReview[];
+  onDelete: (id: number) => Promise<void>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  const average =
+    reviews.length === 0
+      ? null
+      : Math.round((reviews.reduce((total, review) => total + review.score, 0) / reviews.length) * 10) /
+        10;
+
+  async function remove(review: StoreReview) {
+    const who = review.author_name || 'Anonyme';
+    if (!window.confirm(`Supprimer l’avis de ${who} ? Il ne sera pas prévenu.`)) return;
+    try {
+      setError(null);
+      await onDelete(review.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Suppression impossible.');
+    }
+  }
+
+  return (
+    <section className="field reviews">
+      <h2 className="field__label">
+        Avis des amis
+        <span className="field__hint">
+          {average === null
+            ? 'Rien reçu pour l’instant.'
+            : `${reviews.length} avis, moyenne ${average} / 5. Séparés des verdicts, toujours.`}
+        </span>
+      </h2>
+
+      {error && <p className="notice notice--error">{error}</p>}
+
+      {reviews.length === 0 ? (
+        <p className="hint">
+          Personne n’a encore répondu. Les liens se créent depuis <Link to="/partages">Partages</Link>.
+        </p>
+      ) : (
+        <ol className="review-list">
+          {reviews.map((review) => (
+            <li key={review.id} className="review">
+              <span className="review__score">{review.score}</span>
+              <div className="review__body">
+                <p className="review__who">
+                  <strong>{review.author_name || 'Anonyme'}</strong>
+                  {review.share_label && (
+                    <span className="review__share">via « {review.share_label} »</span>
+                  )}
+                </p>
+                <time className="review__date" dateTime={review.created_at}>
+                  {formatDateTime(review.created_at)}
+                  {review.updated_at && ` — corrigé le ${formatDateTime(review.updated_at)}`}
+                </time>
+                {review.note && <p className="review__note">{review.note}</p>}
+              </div>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => void remove(review)}
+                aria-label={`Supprimer l’avis de ${review.author_name || 'Anonyme'}`}
+              >
+                Supprimer
+              </button>
             </li>
           ))}
         </ol>

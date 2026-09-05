@@ -2,8 +2,10 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
+import { GUEST } from '../access.js';
 import { notFound } from '../errors.js';
 import { contentTypeFor, isSeekable, parseRange, resolveInsideFiles } from '../files.js';
+import { guestCanReadFile } from '../shares-repo.js';
 
 /**
  * Sert `data/files/`.
@@ -38,6 +40,19 @@ export default async function fileRoutes(app) {
 
     const absolute = resolveInsideFiles(relative);
     if (!absolute) throw notFound('Fichier introuvable.');
+
+    /**
+     * Depuis le lot 7, cette route est la seule ouverte aux invités qui serve
+     * autre chose qu'une sélection. Un invité n'y atteint que les pièces
+     * jointes des idées d'une sélection vivante — un fichier hors sélection est
+     * introuvable pour lui, exactement comme un fichier qui n'existe pas.
+     *
+     * Le filtre est ici et pas dans la liste blanche : celle-ci raisonne sur
+     * des routes, celui-là sur une ligne de base.
+     */
+    if (request.access === GUEST && !guestCanReadFile(app.db, relative)) {
+      throw notFound('Fichier introuvable.');
+    }
 
     let info;
     try {

@@ -218,6 +218,27 @@ a {
   font-size: var(--text-sm);
 }
 
+/*
+ * Un champ de saisie ordinaire. La classe n'existait pas avant le lot 7 : les
+ * champs de la fiche sont des `EditableText`, ceux des filtres des `select`.
+ * Les écrans de partage en demandent de vrais — un libellé, une date, un lien à
+ * copier — et ils doivent ressembler aux sélecteurs d'à côté.
+ */
+.input {
+  padding: 7px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--text-ui);
+  color: var(--text);
+  width: 100%;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .filters select,
 .select {
   padding: 7px 10px;
@@ -1855,4 +1876,434 @@ a {
     align-items: stretch;
     gap: var(--space-3);
   }
+}
+
+/* --- Avis des amis (lot 7) ----------------------------------------------- */
+
+/*
+ * Volontairement distincts des verdicts, jusque dans la feuille de style : même
+ * gabarit — un score, un corps, une date — mais un ton froid là où le verdict
+ * porte l'accent chaud. Un avis d'ami n'est pas un verdict, et ça doit se voir
+ * sans lire.
+ */
+.reviews {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-soft);
+}
+
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.review:first-child {
+  border-top: none;
+}
+
+.review__score {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.review__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.review__who {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.review__share {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.review__date {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.review__note {
+  margin: var(--space-1) 0 0;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Les deux colonnes optionnelles du catalogue. */
+.card__friends {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.card__friends-unit {
+  color: var(--faint);
+}
+
+/* --- Partages ------------------------------------------------------------ */
+
+.shares {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  margin-top: var(--gap);
+}
+
+.share {
+  padding: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+}
+
+/* Un lien fermé reste lisible mais s'efface : il ne demande plus rien. */
+.share.is-closed {
+  opacity: 0.68;
+}
+
+.share__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.share__label {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.share__state {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.share__state.is-open {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.share__date {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.share__link {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.share__link .input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.share__origin {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.share__origin summary {
+  cursor: pointer;
+}
+
+.share__body {
+  display: flex;
+  gap: var(--gap);
+  align-items: center;
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* Le QR code est rendu en SVG dans la page : on lui donne un fond clair, sinon
+   un lecteur de téléphone ne distingue rien sur le thème sombre. */
+.share__qr {
+  width: 160px;
+  height: 160px;
+  padding: var(--space-2);
+  background: #fff;
+  border-radius: var(--radius);
+}
+
+.share__qr.is-empty {
+  background: var(--panel-2);
+}
+
+.share__qr svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.share__counts {
+  display: flex;
+  gap: var(--space-6);
+  margin: 0;
+}
+
+.share__counts dt {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.share__counts dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xl);
+}
+
+.share__ideas {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.share__score {
+  margin-left: var(--space-2);
+  color: var(--muted);
+}
+
+.share__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-soft);
+}
+
+.share-new {
+  margin-top: var(--gap);
+}
+
+.share-new__fields,
+.share-new__actions {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.share-new__actions {
+  margin-top: var(--space-4);
+}
+
+.share-new__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+  margin-top: var(--space-4);
+}
+
+.share-new__heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+.share-pick {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.share-pick li label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.share-pick li label:hover {
+  background: var(--hover-veil);
+}
+
+.share-order {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.share-order li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.share-order__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .share-new__columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Pages invité -------------------------------------------------------- */
+
+/*
+ * Ce qui entoure la maquette côté invité. La maquette elle-même n'a pas de
+ * variante : un ami voit exactement la page que Nathan a regardée.
+ */
+.guest-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--scrim-strong);
+}
+
+.guest-gate__box {
+  width: min(420px, 100%);
+  padding: var(--space-6);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.guest-gate__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+}
+
+.guest-gate__text {
+  margin: 0 0 var(--space-4);
+  color: var(--text-dim);
+  font-size: var(--text-ui);
+}
+
+.guest-gate__actions {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.guest-recap {
+  max-width: 720px;
+  margin: var(--space-7) auto;
+  padding: 0 var(--space-4);
+}
+
+.guest-recap__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-display);
+}
+
+.guest-recap__text {
+  margin: 0 0 var(--space-6);
+  color: var(--text-dim);
+}
+
+.guest-recap__block {
+  margin-bottom: var(--space-6);
+}
+
+.guest-recap__heading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+.guest-recap__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.guest-recap__list li {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.guest-recap__score {
+  margin-left: var(--space-3);
+  color: var(--accent);
+}
+
+.guest-recap__note {
+  margin: var(--space-1) 0 0;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.guest-recap__empty {
+  margin: 0;
+  color: var(--faint);
+}
+
+.guest-dead {
+  max-width: 520px;
+  margin: 15vh auto;
+  text-align: center;
+}
+
+.guest-dead__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-2xl);
+}
+
+.guest-dead__text {
+  margin: 0;
+  color: var(--text-dim);
 }

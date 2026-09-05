@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import Fastify from 'fastify';
 
+import { registerAccessControl } from './access.js';
 import { config } from './config.js';
 import { createDbHandle } from './db-handle.js';
 import { openDatabase } from './db.js';
@@ -13,6 +14,9 @@ import configRoutes from './routes/config.js';
 import familyRoutes from './routes/families.js';
 import fileRoutes from './routes/files.js';
 import ideaRoutes from './routes/ideas.js';
+import sharePublicRoutes from './routes/share-public.js';
+import shareRoutes from './routes/shares.js';
+import { createRateLimiter } from './rate-limit.js';
 import { validatorCompiler } from './validation.js';
 
 /**
@@ -34,12 +38,28 @@ export async function buildApp({ db, dbPath, logger = false } = {}) {
    * qu'elles ne parlent plus au même objet (voir `db-handle.js`).
    */
   app.decorate('db', database.isDbHandle ? database : createDbHandle(database));
+
+  /**
+   * Le débit des soumissions d'invités, porté par l'application et non par un
+   * module : deux instances (deux tests) ne se comptent pas l'une l'autre.
+   */
+  app.decorate('guestLimit', createRateLimiter({ limit: config.guestSubmitLimit }));
+
+  /**
+   * La porte, **avant toute route**. Les hooks `onRequest` s'exécutent dans
+   * l'ordre d'enregistrement : celui-ci doit passer le premier, sans quoi une
+   * route enregistrée avant lui s'exécuterait pour un visiteur.
+   */
+  registerAccessControl(app);
   registerErrorHandling(app);
 
   await app.register(configRoutes);
   await app.register(familyRoutes);
   await app.register(ideaRoutes);
   await app.register(attachmentRoutes);
+  // Le côté Nathan du partage, puis les quatre routes ouvertes aux invités.
+  await app.register(shareRoutes);
+  await app.register(sharePublicRoutes);
   // `/files/*` sert les fichiers utilisateur ; il est déclaré avant le repli
   // SPA pour qu'un fichier absent renvoie un 404 JSON et non `index.html`.
   await app.register(fileRoutes);
@@ -79,10 +99,20 @@ async function registerStatic(app) {
 
   app.setNotFoundHandler((request, reply) => {
     const isApi = request.url.split('?')[0].startsWith('/api');
+    /**
+     * Le repli SPA ne s'ouvre à un visiteur que sous `/p/` : ailleurs, il lui
+     * servirait la coquille de l'application de Nathan, qui échouerait sur
+     * chaque appel — un écran cassé au lieu d'une porte fermée. La liste
+     * blanche d'`access.js` a déjà écarté le reste ; cette ligne le redit là où
+     * la décision se prend.
+     */
+    const guestPage = request.access !== 'guest' || request.url.startsWith('/p/');
+
     const canServeSpa =
       enabled &&
       existsSync(indexPath) &&
       !isApi &&
+      guestPage &&
       (request.method === 'GET' || request.method === 'HEAD');
 
     if (canServeSpa) return reply.type('text/html').sendFile('index.html');

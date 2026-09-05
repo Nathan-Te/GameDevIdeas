@@ -48,3 +48,35 @@ export async function seedIdea(app, fields = {}) {
   }
   return res.body;
 }
+
+/**
+ * La même application, vue par un **visiteur**.
+ *
+ * L'en-tête `x-vitrine-public` est celui que pose le point d'entrée public en
+ * production (voir `index.js`) : le tester revient donc à tester ce qui se
+ * passera derrière Tailscale Funnel, sans avoir à ouvrir un second port ici.
+ * `app.inject` présente les requêtes depuis `127.0.0.1`, c'est-à-dire comme
+ * Nathan — c'est précisément pourquoi la classification ne peut pas reposer sur
+ * la seule adresse.
+ */
+export async function guest(app, method, url, payload, headers = {}) {
+  const response = await app.inject({
+    method,
+    url,
+    payload,
+    headers: { 'x-vitrine-public': '1', ...headers },
+  });
+
+  let body = null;
+  if (response.body) {
+    try {
+      body = JSON.parse(response.body);
+    } catch {
+      body = response.body;
+    }
+  }
+  return { status: response.statusCode, body, headers: response.headers };
+}
+
+/** Le visiteur, avec son identifiant de navigateur. */
+export const asVisitor = (visitorId) => ({ 'x-vitrine-visitor': visitorId });

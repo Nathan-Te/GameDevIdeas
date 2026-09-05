@@ -111,6 +111,14 @@ Les migrations en attente sont appliquées au démarrage. `data/db`, `data/files
 et `data/backups` sont des volumes : ils survivent aux reconstructions. La
 crontab de sauvegarde est celle donnée plus haut.
 
+### Ouvrir l'instance sur Internet
+
+Depuis le lot 7, une sélection d'idées peut être partagée par lien avec des amis.
+C'est un changement de modèle de menace, pas une case à cocher : la marche à
+suivre — Tailscale Funnel, le point d'entrée public, ce qu'il faut vérifier
+depuis l'extérieur du tailnet et comment refermer — est dans
+**[`Docs/exposition-publique.md`](Docs/exposition-publique.md)**.
+
 Copier `.env.example` en `.env` pour ajuster le port, les chemins de données ou le sujet ntfy. Aucune variable n'est obligatoire.
 
 ## API
@@ -119,7 +127,7 @@ Toutes les réponses sont en JSON, erreurs comprises (`{ error, message }`).
 
 | Méthode | Route | Ce qu'elle fait |
 |---|---|---|
-| `GET` | `/api/ideas` | Catalogue. Query : `family`, `status`, `minScore` (0-5), `sort` (`updated`, `created`, `score`, `title`). Chaque idée porte son verdict courant. |
+| `GET` | `/api/ideas` | Catalogue. Query : `family`, `status`, `minScore` (0-5), `wishlisted`, `sort` (`updated`, `created`, `score`, `title`, `friends-score`, `friends-wishlist`). Chaque idée porte son verdict courant et ses compteurs d'avis d'amis. |
 | `POST` | `/api/ideas` | Crée une idée. Tous les champs sont facultatifs ; sans titre, elle s'appelle « Sans titre ». |
 | `GET` | `/api/ideas/:slug` | Une idée avec son verdict courant. |
 | `PATCH` | `/api/ideas/:slug` | Mise à jour partielle, champ par champ. |
@@ -138,6 +146,20 @@ Toutes les réponses sont en JSON, erreurs comprises (`{ error, message }`).
 | `POST` | `/api/restore` | Multipart : l'archive, et un champ `mode` (`replace` par défaut, ou `merge`). |
 | `GET` | `/api/backups` | Les archives de `data/backups/`. |
 | `DELETE` | `/api/backups/:name` | En supprime une. |
+| `GET`, `POST` | `/api/shares` | Les sélections partagées : liste avec compteurs, création (`label`, `idea_slugs` ordonnés, `expires_at`, `reviews_visible`). |
+| `GET`, `PATCH` | `/api/shares/:id` | Lecture et modification d'une sélection. |
+| `POST` | `/api/shares/:id/revoke` | Révoque le lien. La sélection reste, les avis aussi. |
+| `GET` | `/api/ideas/:slug/reviews` | Les avis d'amis d'une idée. Jamais servis avec les verdicts. |
+| `DELETE` | `/api/reviews/:id` | Modération : retire un avis. |
+| `GET` | `/api/share/:token` | **Ouverte aux visiteurs.** La sélection, ses idées, le récapitulatif du visiteur. |
+| `GET` | `/api/share/:token/ideas/:slug` | **Ouverte aux visiteurs.** Une idée de la sélection ; hors sélection, 404. |
+| `POST` | `/api/share/:token/reviews` | **Ouverte aux visiteurs.** Dépose ou corrige un avis. |
+| `POST` | `/api/share/:token/wishlist` | **Ouverte aux visiteurs.** La liste de souhaits du visiteur. |
+
+Depuis le lot 7, **les routes ouvertes sans authentification sont une liste
+blanche** (`server/src/access.js`). Tout ce qui n'y figure pas répond **404** à un
+visiteur public — pas 403, qui révélerait l'existence de la route. Voir
+[`Docs/exposition-publique.md`](Docs/exposition-publique.md).
 
 `PATCH /api/ideas/:slug` accepte aussi `capsule_file_id` : la pièce désignée doit être une image de cette idée. Chaque idée porte `capsule_url`, l'adresse de cette image.
 
@@ -150,7 +172,7 @@ Le slug est dérivé du titre et rendu unique par un suffixe numérique. Il suit
 ```
 server/   API Fastify + SQLite — migrations SQL numérotées, aucune étape de compilation
 web/      Front React + Vite + TypeScript
-Docs/     seed-vitrine.md (source de vérité) et READMEs de lot
+Docs/     seed-vitrine.md (source de vérité), exposition-publique.md et READMEs de lot
 scripts/  ntfy-notify.mjs — hooks Claude Code
 backup.sh Sauvegarde prête pour le cron
 data/     base, fichiers utilisateur et archives, jamais commités
@@ -164,5 +186,12 @@ data/     base, fichiers utilisateur et archives, jamais commités
 - **Lot 3b — La vraie vitrine** : vue store refaite en réplique fidèle, liste de souhaits. Livré — [`Docs/lots/lot-03b-vitrine-fidele.md`](Docs/lots/lot-03b-vitrine-fidele.md).
 - **Lot 4 — Familles éditables et bande-annonce** : familles en base et écran `/familles`, bande-annonce jouable, `Range` sur `/files/*`. Livré — [`Docs/lots/lot-04-familles-bande-annonce.md`](Docs/lots/lot-04-familles-bande-annonce.md).
 - **Lot 5 — Sauvegarde et restauration** : archive `.tgz`, écran `/sauvegarde`, scripts et cron. Livré — [`Docs/lots/lot-05-sauvegarde.md`](Docs/lots/lot-05-sauvegarde.md).
+- **Lot 6 — Peuplement** : les quatorze idées créées par l'API. Livré — [`Docs/lots/lot-06-peuplement.md`](Docs/lots/lot-06-peuplement.md).
+- **Lot 6b — Bascule sur point de montage** : la restauration remplace le contenu de `data/files`, jamais le dossier. Livré — [`Docs/lots/lot-06b-bascule-point-de-montage.md`](Docs/lots/lot-06b-bascule-point-de-montage.md).
+- **Lot 7 — Partage public et avis d'amis** : sélections partagées par lien, page invité `/p/:token/:slug`, avis et souhaits d'amis, liste blanche de routes, écran `/partages`. Livré — [`Docs/lots/lot-07-partage.md`](Docs/lots/lot-07-partage.md).
 
-Pas d'authentification : l'accès passe par le réseau Tailscale.
+Pas d'authentification, et il n'y en aura pas : l'accès de Nathan passe par le
+réseau Tailscale, et l'accès public — s'il est ouvert — par une liste blanche de
+routes et un point d'entrée dédié. La marche à suivre pour exposer l'instance,
+la vérifier et la refermer est dans
+[`Docs/exposition-publique.md`](Docs/exposition-publique.md).

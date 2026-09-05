@@ -24,6 +24,17 @@ Reprises telles quelles de la section 8 du seed :
 - L'API renvoie toujours du JSON, erreurs comprises (`{ error, message }`).
 - Pas de dépendance ajoutée sans la justifier dans le README du lot.
 
+### Règles ajoutées au lot 7 (ouverture sur Internet)
+
+- **Les routes accessibles sans authentification sont une liste blanche
+  explicite ; toute route non listée répond 404 à un visiteur public.** La liste
+  vit dans `server/src/access.js` — 404 et non 403, pour qu'une route fermée soit
+  indiscernable d'une route inexistante.
+- **Un avis d'ami n'est jamais un verdict : les deux tables ne se mélangent ni en
+  base, ni à l'affichage, ni dans un calcul.** `verdicts` est le jugement de
+  Nathan, `reviews` celui de ses amis. Deux tables, deux types côté front, deux
+  sections, deux colonnes au catalogue — et aucune moyenne des deux.
+
 ### Règle ajoutée en cours de route (hors seed)
 
 **Une livraison qui touche au système de fichiers doit être exercée dans le conteneur, pas seulement en test unitaire.**
@@ -87,6 +98,10 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `DEVELOPER_NAME` | `Nathan` | Nom affiché comme développeur et éditeur sur la vue store, servi par `GET /api/config`. |
 | `SERVE_STATIC`, `WEB_DIST` | `web/dist` s'il existe | Front statique avec repli SPA. |
 | `LOG_LEVEL` | `info` | Journalisation Fastify. |
+| `PUBLIC_PORT` | — | Le **point d'entrée public** (lot 7). Non défini : aucune ouverture, l'instance reste sur le seul tailnet. Défini : un second serveur écoute là, et toute requête qui y entre est un visiteur. Voir [`Docs/exposition-publique.md`](Docs/exposition-publique.md). |
+| `PUBLIC_HOST` | `127.0.0.1` | Interface d'écoute du point d'entrée public. En conteneur : `0.0.0.0`, restreint par la publication du port côté hôte. |
+| `GUEST_SUBMIT_LIMIT` | `30` | Soumissions d'un visiteur par heure et par adresse. Au-delà : 429. |
+| `IP_HASH_SALT` | tiré au démarrage | Sel du hachage d'adresse des visiteurs. Jamais affiché, jamais servi. |
 | `NTFY_TOPIC`, `NTFY_SERVER` | `pg-nathan-7k2x`, `ntfy.sh` | Hooks Claude Code, pas l'application. |
 
 ## Carte des routes
@@ -112,10 +127,36 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `POST /api/restore` | Multipart : l'archive, plus un champ `mode` (`replace` par défaut, ou `merge`). Vérifie, migre l'archive, sauvegarde de sécurité, bascule, vérifie — et remet l'état précédent si la bascule échoue. |
 | `GET /api/backups` | Les archives de `data/backups/` : nom, date, taille. |
 | `DELETE /api/backups/:name` | En supprime une. Nom validé contre la traversée de chemin, comme `/files/`. |
+| `GET`, `POST /api/shares` | Les sélections partagées : liste avec compteurs, création (libellé, `idea_slugs` **ordonnés**, `expires_at`, `reviews_visible`). |
+| `GET`, `PATCH /api/shares/:id` | Lecture, modification (libellé, sélection, échéance, visibilité des avis, `revoked`). |
+| `POST /api/shares/:id/revoke` | Révoque le lien. La sélection n'est pas supprimée : les avis gardent d'où ils viennent. |
+| `GET /api/ideas/:slug/reviews` | Les avis d'amis reçus par une idée. **Jamais servis avec les verdicts.** |
+| `DELETE /api/reviews/:id` | Modération : un avis part, et rien d'autre ne bouge. |
+| `GET /api/share/:token` | **Ouverte aux visiteurs.** La sélection, ses idées, et le récapitulatif du visiteur. Lien inconnu, révoqué ou expiré : le même 404. |
+| `GET /api/share/:token/ideas/:slug` | **Ouverte aux visiteurs.** Une idée de la sélection ; un slug hors sélection répond 404 même s'il existe. |
+| `POST /api/share/:token/reviews` | **Ouverte aux visiteurs.** Dépose ou corrige un avis (un par `visitor_id` et par idée). |
+| `POST /api/share/:token/wishlist` | **Ouverte aux visiteurs.** La liste de souhaits **du visiteur**, jamais celle de Nathan. |
 | `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. Les médias jouables (`.gif`, `.mp4`, `.webm`, `.mp3`, `.ogg`) sont servis `inline` avec `Accept-Ranges: bytes` et honorent les requêtes `Range` (206, 416 hors bornes) — sans quoi une vidéo ne se lit pas dans le navigateur. |
-| Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
+| Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. Pour un **visiteur**, le repli SPA ne s'ouvre que sous `/p/`. |
 
-Côté front, six vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam`, `/corbeille`, `/familles` et `/sauvegarde`.
+Côté front, huit vues : `/` (catalogue), `/idees/:slug` (fiche éditable),
+`/idees/:slug/steam`, `/corbeille`, `/familles`, `/sauvegarde`, `/partages` — et
+`/p/:token/:slug`, **la seule que quelqu'un d'autre que Nathan puisse atteindre**.
+
+La maquette store vit dans `web/src/components/StoreMock.tsx` depuis le lot 7 :
+`/idees/:slug/steam` et `/p/:token/:slug` l'affichent toutes les deux. Il n'y a
+qu'une maquette, donc un ami voit exactement la page que Nathan a regardée.
+
+`/partages` crée et gère les sélections : cocher des idées, les ordonner, le lien
+complet avec sa copie et son QR code, les compteurs de visiteurs et d'avis, la
+visibilité des avis entre visiteurs, la révocation. L'adresse publique (celle de
+Tailscale Funnel) se colle une fois par navigateur et s'y retient : le serveur ne
+connaît pas son nom vu de l'extérieur.
+
+**L'ouverture sur Internet a sa propre note :
+[`Docs/exposition-publique.md`](Docs/exposition-publique.md)** — comment Funnel se
+branche, pourquoi la séparation repose sur un port d'écoute distinct et non sur
+l'adresse source, et ce qu'il faut vérifier depuis l'extérieur du tailnet.
 
 `/sauvegarde` tient en trois blocs : ce que contient l'archive et son téléchargement, le dépôt d'une archive à restaurer (`Remplacer` / `Fusionner`, avec une confirmation qui compte les idées et les fichiers de part et d'autre), et la liste des archives du serveur. Les chiffres de l'archive déposée sont lus **dans le navigateur** : `manifest.json` est la première entrée du `.tgz`, `DecompressionStream` fait le reste (`web/src/archive.ts`).
 
@@ -134,6 +175,8 @@ Côté front, six vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/id
 - **Lot 6 — Peuplement** : livré. Les quatorze idées de `Docs/fiches-vitrine-14.md`, créées par l'API avec `scripts/seed-ideas.mjs` (idempotent, repérage par titre), et l'archive à transporter sur le serveur.
 - **Lot 6b — Bascule sur point de montage** : livré. La restauration remplace le *contenu* de `data/files`, jamais le dossier — un point de montage ne se renomme pas (`EBUSY`) et `rename` n'en traverse pas la frontière (`EXDEV`). Nettoyage des `.incoming` orphelins au démarrage, et `npm run test:container` pour l'exercer là où c'est vrai.
 
+- **Lot 7 — Partage public et avis d'amis** : livré. Sélections partagées par lien, page invité `/p/:token/:slug`, avis et listes de souhaits d'amis (migration `006`), liste blanche de routes et point d'entrée public, écran `/partages`. **L'application est exposable sur Internet** — la marche à suivre est dans [`Docs/exposition-publique.md`](Docs/exposition-publique.md).
+
 ## Modèle de données
 
 - `ideas` — la fiche. `family` est **un slug de la table `families`**, validé par l'application et non par une clé étrangère : renommer un slug de famille met à jour les idées portant l'ancien, dans la même transaction. `capsule_file_id` et `trailer_file_id` pointent une pièce jointe de l'idée, en `ON DELETE SET NULL`.
@@ -142,6 +185,9 @@ Côté front, six vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/id
 - **Une idée porte autant de bandes-annonces et de captures qu'elle veut.** La visionneuse de la page store les enchaîne, vidéos d'abord, captures ensuite — comme un magasin. `ideas.trailer_file_id` ne désigne pas « la » bande-annonce mais celle qui **ouvre la marche** ; à défaut de désignation, c'est la première pièce `trailer` dans l'ordre des pièces jointes. La règle vit dans `SELECT_IDEA` (`ideas-repo.js`) et sort en `leading_trailer_id` : le front la lit, il ne la rejoue pas.
 - `families` (migration `004`) — `slug`, `label`, `store_tags` (JSON, les étiquettes de la page store), `features` (JSON parmi `solo`, `coop-online`, `multiplayer`, `local-coop`), `position`. Peuplée au démarrage depuis `SEED_FAMILIES` de `shared/store-model.js`, **et seulement si elle est vide** : le seed ne ressuscite jamais une famille supprimée.
 - Migration `005` — `ideas.trailer_file_id`, et la reconstruction de `attachments` pour élargir sa contrainte `CHECK` au `kind` `trailer`.
+- Migration `006` — le partage. `shares` (jeton de 32 octets en base64url, libellé, `reviews_visible`, `expires_at`, `revoked_at`), `share_ideas` (la sélection, **ordonnée**), `reviews` (l'avis d'un ami : `author_name`, `score`, `note`, `visitor_id`, `ip_hash`, `updated_at`) et `share_wishlists` (la liste de souhaits **du visiteur**, distincte de `ideas.wishlisted_at` qui est celle de Nathan).
+- **`reviews` et `verdicts` ne se croisent nulle part.** `reviews.share_id` est en `ON DELETE SET NULL` : un avis donné ne se retire pas si sa sélection disparaît. Un index unique `(idea_id, visitor_id)` fait que déposer deux fois, c'est corriger — et que personne ne corrige l'avis d'un autre.
+- Le bloc « Évaluations » de la page store est alimenté par les **avis d'amis** depuis le lot 7, et plus par les verdicts : c'est ce qui solde le point ouvert du lot 3b.
 
 Le support manette n'est pas une fonctionnalité de famille : il est ajouté à toutes les fiches par `storeFeatures`.
 
@@ -174,6 +220,9 @@ shared/           store-model.js — la traduction « idée » → « fiche de m
 server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
   src/            config, db, migrate, routes, validation, dépôts SQL,
+                  access.js (la porte : owner/guest, liste blanche, 404),
+                  shares-repo.js (sélections, avis d'amis, souhaits d'invités),
+                  rate-limit.js (le débit des soumissions, en mémoire),
                   files.js (disque, garde de chemin, `Range`), links.js (liens typés),
                   families-repo.js (les familles, seed compris),
                   backup.js (archive, restauration, fusion, verrou),
@@ -185,7 +234,8 @@ web/              Front React + Vite + TypeScript
                   families.ts (la liste chargée une fois, partagée par les vues),
                   pages, composants, tokens.css puis styles.css,
                   steam.css (la palette du photomontage, hors tokens)
-Docs/             seed-vitrine.md (source de vérité) et lots/
+Docs/             seed-vitrine.md (source de vérité), exposition-publique.md
+                  (l'ouverture sur Internet : Funnel, ports, vérifications) et lots/
 scripts/          ntfy-notify.mjs (hooks Claude Code)
 data/             base SQLite, fichiers utilisateur et archives — jamais commité
   db/             vitrine.db (+ -wal, -shm)

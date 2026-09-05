@@ -11,6 +11,9 @@ import type {
   RestoreMode,
   RestoreResult,
   ServerBackup,
+  Share,
+  SharePatch,
+  StoreReview,
   Verdict,
 } from './types';
 
@@ -267,6 +270,42 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ ids }) },
     );
     return attachments;
+  },
+
+  // --- Partage et avis d'amis -----------------------------------------------
+
+  async listShares(): Promise<Share[]> {
+    const { shares } = await request<{ shares: Share[] }>('/api/shares');
+    return shares;
+  },
+
+  createShare(fields: SharePatch): Promise<Share> {
+    return request<Share>('/api/shares', { method: 'POST', body: JSON.stringify(fields) });
+  },
+
+  updateShare(id: number, patch: SharePatch): Promise<Share> {
+    return request<Share>(`/api/shares/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+
+  /**
+   * Révocation. Route à part et non un champ de PATCH : c'est le geste qu'on
+   * cherche en urgence, il ne doit pas dépendre d'un corps bien formé.
+   */
+  revokeShare(id: number): Promise<Share> {
+    return request<Share>(`/api/shares/${id}/revoke`, { method: 'POST' });
+  },
+
+  /** Les avis d'amis d'une idée. Jamais servis avec les verdicts. */
+  async listReviews(slug: string): Promise<StoreReview[]> {
+    const { reviews } = await request<{ reviews: StoreReview[] }>(
+      `/api/ideas/${encodeURIComponent(slug)}/reviews`,
+    );
+    return reviews;
+  },
+
+  /** Modération : Nathan retire un avis. */
+  deleteReview(id: number): Promise<StoreReview> {
+    return request<StoreReview>(`/api/reviews/${id}`, { method: 'DELETE' });
   },
 
   // --- Sauvegarde -----------------------------------------------------------

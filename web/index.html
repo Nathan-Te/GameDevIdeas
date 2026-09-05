@@ -6,6 +6,14 @@
     <meta name="color-scheme" content="dark" />
     <title>Vitrine</title>
     <meta name="description" content="Catalogue personnel d'idées de jeux." />
+    <!--
+      Vitrine n'a rien à faire dans un moteur de recherche, et une page de
+      sélection partagée encore moins que les autres : elle porte un lien
+      secret. Le serveur pose l'en-tête `X-Robots-Tag` correspondant sur
+      **toutes** ses réponses — cette balise est la ceinture, l'en-tête les
+      bretelles, et c'est l'en-tête qui compte pour un fichier non HTML.
+    -->
+    <meta name="robots" content="noindex, nofollow" />
   </head>
   <body>
     <div id="root"></div>

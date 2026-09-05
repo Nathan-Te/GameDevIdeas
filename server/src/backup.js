@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -168,7 +168,20 @@ async function copyTree(from, to, { skip = [] } = {}) {
 
 // --- Inventaire --------------------------------------------------------------
 
-const countOf = (db, table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+/**
+ * Le nombre de lignes d'une table, ou 0 si la table n'existe pas encore.
+ *
+ * Ce repli n'est pas de la prudence gratuite : une archive peut être produite à
+ * partir d'une base d'un schéma antérieur (c'est ce que fait la migration d'une
+ * archive à la restauration), et un inventaire n'a aucune raison d'échouer
+ * parce qu'une table est plus jeune que la base qu'il décrit.
+ */
+function countOf(db, table) {
+  const exists = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table);
+  return exists ? db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n : 0;
+}
 
 /** La dernière migration appliquée : la version de schéma de la base. */
 export function schemaVersion(db) {
@@ -202,6 +215,10 @@ export async function backupPreview({ db, filesDir = config.filesDir, backupsDir
       verdicts: countOf(db, 'verdicts'),
       attachments: countOf(db, 'attachments'),
       families: countOf(db, 'families'),
+      // Le lot 7 ajoute le partage : les sélections et les avis d'amis font
+      // partie de ce qu'une sauvegarde doit rendre.
+      shares: countOf(db, 'shares'),
+      reviews: countOf(db, 'reviews'),
     },
     files: { count: files.length, total_bytes: totalBytes },
     database_bytes: databaseBytes,
@@ -273,6 +290,8 @@ export async function createArchive({
         verdicts: countOf(db, 'verdicts'),
         attachments: countOf(db, 'attachments'),
         families: countOf(db, 'families'),
+        shares: countOf(db, 'shares'),
+        reviews: countOf(db, 'reviews'),
       },
       files: { count: files.length, total_bytes: totalBytes },
       hashes,
@@ -609,7 +628,9 @@ async function applyMerge({ dir, db, filesDir }) {
   const source = openDatabase({ path: join(dir, DB_ENTRY), migrate: false });
   /** Copies à faire une fois la transaction passée, `[from, to]`. */
   const copies = [];
-  const summary = { ideas: 0, verdicts: 0, attachments: 0, families: 0, renamed: [] };
+  const summary = { ideas: 0, verdicts: 0, attachments: 0, families: 0, shares: 0, reviews: 0, renamed: [] };
+  /** Ancien identifiant d'idée -> nouveau. Les sélections et les avis en vivent. */
+  const ideaIds = new Map();
 
   try {
     const sourceIdeas = source.prepare('SELECT * FROM ideas').all();
@@ -707,7 +728,11 @@ async function applyMerge({ dir, db, filesDir }) {
         const capsule = remap.get(idea.capsule_file_id) ?? null;
         const trailer = remap.get(idea.trailer_file_id) ?? null;
         if (capsule || trailer) setMedia.run(capsule, trailer, ideaId);
+
+        ideaIds.set(idea.id, ideaId);
       }
+
+      mergeShares({ source, db, ideaIds, summary });
     })();
   } finally {
     source.close();
@@ -720,6 +745,92 @@ async function applyMerge({ dir, db, filesDir }) {
   }
 
   return summary;
+}
+
+/**
+ * Fusionne les sélections partagées, leurs avis et les listes de souhaits des
+ * invités (lot 7).
+ *
+ * Trois précautions, toutes apprises de la même règle — une fusion ajoute, elle
+ * n'écrase jamais :
+ *
+ * - le **jeton** de l'archive est repris tel quel s'il est libre ; sinon un
+ *   jeton neuf est tiré. Deux instances ne peuvent pas se disputer un lien, et
+ *   fusionner une archive de soi-même ne casse pas les liens déjà distribués ;
+ * - les identifiants d'idées sont **traduits** par `ideaIds`, comme les pièces
+ *   jointes : une sélection qui pointerait l'ancien numéro désignerait l'idée
+ *   d'un voisin ;
+ * - un avis dont l'idée n'a pas été fusionnée est laissé de côté plutôt que
+ *   rattaché au hasard.
+ */
+function mergeShares({ source, db, ideaIds, summary }) {
+  const tokenTaken = db.prepare('SELECT 1 FROM shares WHERE token = ? LIMIT 1');
+  const insertShare = db.prepare(
+    `INSERT INTO shares (token, label, reviews_visible, created_at, expires_at, revoked_at)
+     VALUES (@token, @label, @reviews_visible, @created_at, @expires_at, @revoked_at)`,
+  );
+  const insertShareIdea = db.prepare(
+    'INSERT OR IGNORE INTO share_ideas (share_id, idea_id, position) VALUES (?, ?, ?)',
+  );
+  const insertReview = db.prepare(
+    `INSERT OR IGNORE INTO reviews (idea_id, share_id, author_name, score, note, created_at,
+                                    updated_at, visitor_id, ip_hash)
+     VALUES (@idea_id, @share_id, @author_name, @score, @note, @created_at,
+             @updated_at, @visitor_id, @ip_hash)`,
+  );
+  const insertWish = db.prepare(
+    `INSERT OR IGNORE INTO share_wishlists (share_id, idea_id, visitor_id, created_at)
+     VALUES (?, ?, ?, ?)`,
+  );
+
+  /** Ancien identifiant de sélection -> nouveau. */
+  const shareIds = new Map();
+
+  for (const share of source.prepare('SELECT * FROM shares ORDER BY id').all()) {
+    const token = tokenTaken.get(share.token) ? randomBytes(32).toString('base64url') : share.token;
+    const id = Number(
+      insertShare.run({
+        token,
+        label: share.label,
+        reviews_visible: share.reviews_visible,
+        created_at: share.created_at,
+        expires_at: share.expires_at ?? null,
+        revoked_at: share.revoked_at ?? null,
+      }).lastInsertRowid,
+    );
+    shareIds.set(share.id, id);
+    summary.shares += 1;
+  }
+
+  for (const row of source.prepare('SELECT * FROM share_ideas').all()) {
+    const shareId = shareIds.get(row.share_id);
+    const ideaId = ideaIds.get(row.idea_id);
+    if (shareId && ideaId) insertShareIdea.run(shareId, ideaId, row.position);
+  }
+
+  for (const review of source.prepare('SELECT * FROM reviews ORDER BY id').all()) {
+    const ideaId = ideaIds.get(review.idea_id);
+    if (!ideaId) continue;
+
+    insertReview.run({
+      idea_id: ideaId,
+      share_id: shareIds.get(review.share_id) ?? null,
+      author_name: review.author_name,
+      score: review.score,
+      note: review.note ?? null,
+      created_at: review.created_at,
+      updated_at: review.updated_at ?? null,
+      visitor_id: review.visitor_id,
+      ip_hash: review.ip_hash ?? null,
+    });
+    summary.reviews += 1;
+  }
+
+  for (const wish of source.prepare('SELECT * FROM share_wishlists').all()) {
+    const shareId = shareIds.get(wish.share_id);
+    const ideaId = ideaIds.get(wish.idea_id);
+    if (shareId && ideaId) insertWish.run(shareId, ideaId, wish.visitor_id, wish.created_at);
+  }
 }
 
 // --- Restauration ------------------------------------------------------------

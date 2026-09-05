@@ -71,6 +71,27 @@ export const config = {
    */
   developerName: env.DEVELOPER_NAME || 'Nathan',
 
+  /**
+   * Le port du **point d'entrée public** (lot 7). Non défini : aucun point
+   * d'entrée public, l'application reste ce qu'elle était — joignable par le
+   * seul réseau Tailscale.
+   *
+   * Tout ce qui arrive par ce port est un visiteur, sans condition et sans
+   * en-tête à croire : c'est un fait de transport, pas une promesse. C'est le
+   * mécanisme sur lequel repose la séparation (`Docs/exposition-publique.md`).
+   */
+  publicPort: env.PUBLIC_PORT ? Number(env.PUBLIC_PORT) : null,
+
+  /**
+   * L'interface du point d'entrée public. `127.0.0.1` par défaut : le reverse
+   * proxy de Tailscale Funnel tourne sur la même machine, personne d'autre n'a
+   * besoin d'atteindre ce port.
+   */
+  publicHost: env.PUBLIC_HOST || '127.0.0.1',
+
+  /** Soumissions d'un invité (avis, liste de souhaits) par heure et par adresse. */
+  guestSubmitLimit: Number(env.GUEST_SUBMIT_LIMIT || 30),
+
   migrationsDir: resolve(repoRoot, 'server', 'migrations'),
   webDist: fromRoot(env.WEB_DIST || './web/dist'),
 

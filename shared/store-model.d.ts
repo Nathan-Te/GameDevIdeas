@@ -52,6 +52,17 @@ export declare function reviewSummary(score: number | null | undefined): {
   tone: ReviewTone;
 };
 export declare function isRecommended(score: number | null | undefined): boolean;
+
+/** Un avis d'ami, vu par le modèle store : seul le score l'intéresse. */
+export interface ScoredReview {
+  score: number;
+}
+
+export declare function friendScoreAverage(reviews: ScoredReview[] | null | undefined): number | null;
+export declare function friendReviewSummary(reviews: ScoredReview[] | null | undefined): {
+  label: string;
+  tone: ReviewTone;
+};
 export declare function storePrice(cents: number | null | undefined): string;
 export declare function similarTitles(competition: string | null | undefined): string[];
 export declare function shortDescription(

@@ -179,6 +179,33 @@ export function reviewSummary(score) {
   }
 }
 
+/**
+ * La moyenne des avis d'amis, ou `null` si personne n'a encore noté.
+ *
+ * **Uniquement des avis d'amis.** Le verdict de Nathan n'entre pas dans ce
+ * calcul et n'y entrera jamais : ce sont deux jugements différents, et leur
+ * moyenne ne serait le jugement de personne. C'est la règle du lot 7, et elle
+ * vit ici parce que c'est ici qu'on serait tenté de l'enfreindre.
+ */
+export function friendScoreAverage(reviews) {
+  const scores = (reviews ?? [])
+    .map((review) => review?.score)
+    .filter((score) => typeof score === 'number');
+
+  if (scores.length === 0) return null;
+  return scores.reduce((total, score) => total + score, 0) / scores.length;
+}
+
+/**
+ * Le libellé d'évaluation du magasin, calculé sur les avis d'amis. C'est ce qui
+ * remplit enfin le bloc « Évaluations » de la page store : depuis le lot 7, un
+ * avis y est un vrai avis de quelqu'un d'autre, plus un verdict déguisé.
+ */
+export function friendReviewSummary(reviews) {
+  const average = friendScoreAverage(reviews);
+  return reviewSummary(average === null ? null : Math.round(average));
+}
+
 /** Un avis est « Recommandé » à partir de 3 sur 5, comme un pouce levé. */
 export function isRecommended(score) {
   return typeof score === 'number' && score >= 3;
