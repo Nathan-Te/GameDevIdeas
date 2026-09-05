@@ -144,31 +144,82 @@ test('trailer_file_id n’accepte qu’une bande-annonce de cette idée', async 
   const ok = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: trailer.id });
   assert.equal(ok.status, 200);
   assert.equal(ok.body.trailer_file_id, trailer.id);
+  assert.equal(ok.body.leading_trailer_id, trailer.id);
   assert.match(ok.body.trailer_url, /^\/files\//);
 });
 
-test('la bande-annonce se retire, et se libère quand la pièce est supprimée', async (t) => {
+test('une idée porte plusieurs bandes-annonces ; la première mène, sans rien désigner', async (t) => {
+  const { app } = await makeApp(t);
+  const idea = await seedIdea(app, { title: 'Trois vidéos' });
+
+  const uploaded = await upload(app, idea.slug, [
+    { filename: 'un.mp4', type: 'video/mp4', body: 'mp4' },
+    { filename: 'deux.webm', type: 'video/webm', body: 'webm' },
+    { filename: 'trois.gif', type: 'image/gif', body: 'GIF89a' },
+  ]);
+  const [first, , third] = uploaded.body.attachments;
+
+  // Rien n'a été désigné : c'est la première pièce `trailer` qui mène. Sans ce
+  // repli, déposer une vidéo ne suffirait pas — il faudrait aussi y penser.
+  const auto = await get(app, `/api/ideas/${idea.slug}`);
+  assert.equal(auto.body.trailer_file_id, null, 'rien n’a été désigné');
+  assert.equal(auto.body.leading_trailer_id, first.id);
+  assert.match(auto.body.trailer_url, /un\.mp4$/);
+
+  // Une désignation explicite l'emporte sur l'ordre.
+  const chosen = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: third.id });
+  assert.equal(chosen.body.trailer_file_id, third.id);
+  assert.equal(chosen.body.leading_trailer_id, third.id);
+  assert.match(chosen.body.trailer_url, /trois\.gif$/);
+
+  // Et les trois restent des pièces de l'idée : la visionneuse les enchaîne.
+  const list = await get(app, `/api/ideas/${idea.slug}/attachments`);
+  assert.equal(list.body.attachments.filter((item) => item.kind === 'trailer').length, 3);
+});
+
+test('retirer la désignation rend la tête à la première, pas au vide', async (t) => {
   const { app } = await makeApp(t);
   const idea = await seedIdea(app, { title: 'Va et vient' });
 
   const uploaded = await upload(app, idea.slug, [
-    { filename: 'moment.gif', type: 'image/gif', body: 'GIF89a' },
+    { filename: 'un.mp4', type: 'video/mp4', body: 'mp4' },
+    { filename: 'deux.mp4', type: 'video/mp4', body: 'mp4' },
   ]);
-  const trailer = uploaded.body.attachments[0];
+  const [first, second] = uploaded.body.attachments;
 
-  await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: trailer.id });
+  await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: second.id });
 
   const cleared = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: null });
-  assert.equal(cleared.body.trailer_file_id, null);
-  assert.equal(cleared.body.trailer_url, null);
+  assert.equal(cleared.body.trailer_file_id, null, 'plus rien n’est désigné');
+  assert.equal(cleared.body.leading_trailer_id, first.id, 'la première reprend la tête');
+  assert.match(cleared.body.trailer_url, /un\.mp4$/);
+});
 
-  await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: trailer.id });
-  const removed = await app.inject({ method: 'DELETE', url: `/api/attachments/${trailer.id}` });
-  assert.equal(removed.statusCode, 200);
+test('la bande-annonce se libère quand la pièce est supprimée', async (t) => {
+  const { app } = await makeApp(t);
+  const idea = await seedIdea(app, { title: 'Suppression' });
 
-  const reloaded = await get(app, `/api/ideas/${idea.slug}`);
-  assert.equal(reloaded.body.trailer_file_id, null, 'la référence est libérée avec la pièce');
-  assert.equal(reloaded.body.trailer_url, null);
+  const uploaded = await upload(app, idea.slug, [
+    { filename: 'un.mp4', type: 'video/mp4', body: 'mp4' },
+    { filename: 'deux.mp4', type: 'video/mp4', body: 'mp4' },
+  ]);
+  const [first, second] = uploaded.body.attachments;
+
+  await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: first.id });
+  assert.equal(
+    (await app.inject({ method: 'DELETE', url: `/api/attachments/${first.id}` })).statusCode,
+    200,
+  );
+
+  const afterFirst = await get(app, `/api/ideas/${idea.slug}`);
+  assert.equal(afterFirst.body.trailer_file_id, null, 'la référence est libérée avec la pièce');
+  assert.equal(afterFirst.body.leading_trailer_id, second.id, 'la suivante prend la tête');
+
+  // La dernière partie : l'idée n'a plus de bande-annonce du tout.
+  await app.inject({ method: 'DELETE', url: `/api/attachments/${second.id}` });
+  const empty = await get(app, `/api/ideas/${idea.slug}`);
+  assert.equal(empty.body.leading_trailer_id, null);
+  assert.equal(empty.body.trailer_url, null);
 });
 
 test('la bande-annonce est servie sur le catalogue comme la capsule', async (t) => {
@@ -187,6 +238,7 @@ test('la bande-annonce est servie sur le catalogue comme la capsule', async (t) 
   const list = await get(app, '/api/ideas');
   const listed = list.body.ideas.find((item) => item.slug === idea.slug);
   assert.match(listed.trailer_url, /moment\.gif$/);
+  assert.equal(listed.leading_trailer_id, uploaded.body.attachments[0].id);
 });
 
 test('purger une idée qui a une bande-annonce n’échoue pas sur la référence', async (t) => {

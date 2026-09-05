@@ -48,6 +48,20 @@ const REVIEW_CARDS = 3;
 const VISIBLE_THUMBS = 5;
 const THUMB_STEP = 120;
 
+/**
+ * Une place dans la visionneuse. Un magasin y met ses vidéos d'abord, ses
+ * captures ensuite ; une idée sans aucune vidéo garde la carte de texte du lot
+ * 3b à la place de la première.
+ *
+ * Les captures portent leur rang **dans les captures** et non dans la
+ * visionneuse : c'est ce rang que la loupe passe au `Lightbox`, qui ne connaît
+ * que des images. Les mélanger a été le seul vrai piège de ce découpage.
+ */
+type Slide =
+  | { type: 'trailer'; item: Attachment; leading: boolean }
+  | { type: 'shot'; item: Attachment; shotIndex: number }
+  | { type: 'pitch' };
+
 export function SteamPage({ slug, search }: { slug: string; search: string }) {
   const [idea, setIdea] = useState<Idea | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -163,6 +177,34 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
     [attachments, idea?.capsule_file_id],
   );
 
+  /**
+   * Les bandes-annonces, celle en tête d'abord. Le serveur dit laquelle mène
+   * (`leading_trailer_id` : la désignée, ou la première à défaut) — on ne
+   * recalcule pas la règle ici, elle vivrait alors à deux endroits.
+   */
+  const trailers = useMemo(() => {
+    const all = attachments.filter((item) => item.kind === 'trailer' && item.file_url);
+    const leading = all.find((item) => item.id === idea?.leading_trailer_id);
+    return leading ? [leading, ...all.filter((item) => item !== leading)] : all;
+  }, [attachments, idea?.leading_trailer_id]);
+
+  /** Vidéos puis captures, comme sur un magasin. */
+  const slides = useMemo<Slide[]>(() => {
+    const videos: Slide[] =
+      trailers.length > 0
+        ? trailers.map((item, position) => ({
+            type: 'trailer',
+            item,
+            leading: position === 0,
+          }))
+        : [{ type: 'pitch' }];
+
+    return [
+      ...videos,
+      ...shots.map((item, shotIndex) => ({ type: 'shot' as const, item, shotIndex })),
+    ];
+  }, [trailers, shots]);
+
   if (missing) {
     return (
       <div className="page">
@@ -197,8 +239,10 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
 
   // La bande-annonce occupe toujours la première place de la visionneuse, comme
   // sur un magasin : c'est le premier élément qu'on regarde, décrit ou non.
-  const slides = shots.length + 1;
-  const maxOffset = Math.max(0, slides - VISIBLE_THUMBS);
+  const maxOffset = Math.max(0, slides.length - VISIBLE_THUMBS);
+  // Une pièce supprimée dans un autre onglet peut raccourcir la liste sous la
+  // sélection : on retombe sur la première place plutôt que sur du vide.
+  const current = slides[slide] ?? slides[0];
 
   const index = neighbours.findIndex((item) => item.slug === idea.slug);
   const previous = index > 0 ? neighbours[index - 1] : null;
@@ -292,34 +336,43 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
             <div className="sp-glance sp-width">
               <div className="sp-glance__left">
                 <div className="sp-stage">
-                  {slide === 0 || !shots[slide - 1] ? (
-                    idea.trailer_url ? (
-                      // La bande-annonce joue, comme sur un magasin. Le champ
-                      // « GIF » passe alors sous le lecteur : il décrit ce qu'on
-                      // est en train de regarder, il ne le remplace plus.
-                      <TrailerStage url={idea.trailer_url} title={title} />
-                    ) : (
-                      <div className="sp-trailer">
-                        <span className="sp-trailer__play" aria-hidden="true" />
-                        <p className={`sp-trailer__text ${idea.gif ? '' : 'is-empty'}`}>
-                          {idea.gif || 'Aucun moment clipable décrit.'}
-                        </p>
-                        <span className="sp-trailer__tag">Bande-annonce</span>
-                      </div>
-                    )
-                  ) : (
+                  {current.type === 'trailer' && (
+                    // La bande-annonce joue, comme sur un magasin. `key` sur
+                    // l'identifiant : passer d'une vidéo à l'autre doit remonter
+                    // le lecteur, pas réutiliser celui qui joue déjà.
+                    <TrailerStage
+                      key={current.item.id}
+                      url={current.item.file_url ?? ''}
+                      title={current.item.label || title}
+                    />
+                  )}
+
+                  {current.type === 'pitch' && (
+                    <div className="sp-trailer">
+                      <span className="sp-trailer__play" aria-hidden="true" />
+                      <p className={`sp-trailer__text ${idea.gif ? '' : 'is-empty'}`}>
+                        {idea.gif || 'Aucun moment clipable décrit.'}
+                      </p>
+                      <span className="sp-trailer__tag">Bande-annonce</span>
+                    </div>
+                  )}
+
+                  {current.type === 'shot' && (
                     <button
                       type="button"
                       className="sp-stage__shot"
-                      onClick={() => setViewing(slide - 1)}
-                      aria-label={`Voir ${shots[slide - 1].label} en grand`}
+                      onClick={() => setViewing(current.shotIndex)}
+                      aria-label={`Voir ${current.item.label} en grand`}
                     >
-                      <img src={shots[slide - 1].file_url ?? ''} alt={shots[slide - 1].label} />
+                      <img src={current.item.file_url ?? ''} alt={current.item.label} />
                     </button>
                   )}
                 </div>
 
-                {slide === 0 && idea.trailer_url && idea.gif && (
+                {/* Le champ « GIF » décrit le moment clipable de l'idée : il n'a
+                    de sens que sous la vidéo de tête. Les suivantes portent leur
+                    propre libellé, et rien d'autre à dire. */}
+                {current.type === 'trailer' && current.leading && idea.gif && (
                   <p className="sp-stage__caption">{idea.gif}</p>
                 )}
 
@@ -343,29 +396,28 @@ export function SteamPage({ slug, search }: { slug: string; search: string }) {
                       className="sp-strip__rail"
                       style={{ transform: `translateX(-${stripOffset * THUMB_STEP}px)` }}
                     >
-                      <button
-                        type="button"
-                        className={`sp-thumb sp-thumb--trailer ${slide === 0 ? 'is-active' : ''}`}
-                        onClick={() => showSlide(0)}
-                        aria-label="Bande-annonce"
-                      >
-                        {idea.trailer_url ? (
-                          <TrailerThumb url={idea.trailer_url} />
-                        ) : (
-                          <span className="sp-thumb__trailer" />
-                        )}
-                        <PlayBadge className="sp-thumb__play" />
-                      </button>
-
-                      {shots.map((shot, position) => (
+                      {slides.map((item, position) => (
                         <button
-                          key={shot.id}
+                          key={item.type === 'pitch' ? 'pitch' : item.item.id}
                           type="button"
-                          className={`sp-thumb ${slide === position + 1 ? 'is-active' : ''}`}
-                          onClick={() => showSlide(position + 1)}
-                          aria-label={shot.label || `Capture ${position + 1}`}
+                          className={`sp-thumb ${item.type !== 'shot' ? 'sp-thumb--trailer' : ''} ${
+                            slide === position ? 'is-active' : ''
+                          }`}
+                          onClick={() => showSlide(position)}
+                          aria-label={thumbLabel(item, position)}
                         >
-                          <img src={shot.file_url ?? ''} alt="" loading="lazy" />
+                          {item.type === 'pitch' && <span className="sp-thumb__trailer" />}
+                          {item.type === 'trailer' && (
+                            <TrailerThumb url={item.item.file_url ?? ''} />
+                          )}
+                          {item.type === 'shot' && (
+                            <img src={item.item.file_url ?? ''} alt="" loading="lazy" />
+                          )}
+
+                          {/* Le pictogramme de lecture est ce qui distingue une
+                              vidéo d'une capture dans un bandeau qui n'a que des
+                              rectangles. */}
+                          {item.type !== 'shot' && <PlayBadge className="sp-thumb__play" />}
                         </button>
                       ))}
                     </div>
@@ -813,6 +865,15 @@ function NavLink({
       {direction === 'next' ? ` ${arrow}` : ''}
     </Link>
   );
+}
+
+/** Ce qu'annonce une vignette à qui ne voit pas l'image. */
+function thumbLabel(slide: Slide, position: number): string {
+  if (slide.type === 'pitch') return 'Bande-annonce';
+  if (slide.type === 'trailer') {
+    return slide.leading ? 'Bande-annonce' : slide.item.label || `Vidéo ${position + 1}`;
+  }
+  return slide.item.label || `Capture ${slide.shotIndex + 1}`;
 }
 
 /** Le domaine d'un lien attaché, pour la ligne « Site web » de la fiche. */

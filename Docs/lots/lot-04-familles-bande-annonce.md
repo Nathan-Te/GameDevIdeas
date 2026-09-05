@@ -19,16 +19,16 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 
 - **Nouveau `kind` `trailer`** pour `.gif`, `.mp4`, `.webm`. Le GIF quitte donc les images : un GIF attaché est une bande-annonce, pas une capture. Limite propre `MAX_TRAILER_MB` (défaut 100).
 - **Migration `005-trailer.sql`** : `ideas.trailer_file_id` nullable en `ON DELETE SET NULL`, comme la capsule ; reconstruction de `attachments` pour élargir sa contrainte `CHECK` ; les GIF déjà attachés deviennent des bandes-annonces, et une capsule qui en était un est libérée.
-- **`PATCH /api/ideas/:slug`** accepte `trailer_file_id` — refusé si la pièce n'est pas un `trailer` de cette idée.
+- **`PATCH /api/ideas/:slug`** accepte `trailer_file_id` — refusé si la pièce n'est pas un `trailer` de cette idée. Une idée en porte autant qu'elle veut : `trailer_file_id` désigne celle qui **ouvre la marche**, pas la seule. Sans désignation, c'est la première dans l'ordre des pièces jointes, et le serveur le dit en `leading_trailer_id`.
 - **`/files/*`** sert les médias jouables `inline` avec `Accept-Ranges: bytes`, honore les requêtes `Range` (206 + `Content-Range`, 416 hors bornes) et ignore un `Range` illisible.
-- **Page idée** : carte `trailer` avec son aperçu (lecteur en pause), bouton « Définir comme bande-annonce », marqueur sur la courante, ligne « Bande-annonce » dans la fiche.
-- **Page store** : la première position de la visionneuse joue la bande-annonce, en boucle et sans son, avec sa barre de lecture — lecture/pause, position dans la vidéo, son — et un gros bouton central à l'arrêt. Le champ `gif` devient le sous-titre sous le lecteur. Sans bande-annonce, on retombe sur la carte texte du lot 3b. La vignette du bandeau porte le pictogramme de lecture.
+- **Page idée** : carte `trailer` avec son aperçu (lecteur en pause), bouton « Mettre en tête » sur celles qui n'y sont pas, marqueur « en tête » sur celle qui y est, et le compte dans la fiche.
+- **Page store** : la visionneuse enchaîne **toutes** les bandes-annonces puis **toutes** les captures, comme un magasin. Chaque vidéo joue en boucle et sans son, avec sa barre de lecture — lecture/pause, position dans la vidéo, son — et un gros bouton central à l'arrêt. Le champ `gif` est le sous-titre de la vidéo de tête ; les suivantes portent leur propre libellé. Sans aucune vidéo, on retombe sur la carte texte du lot 3b en première place. Les vignettes de vidéo portent le pictogramme de lecture, les captures non.
 - **Catalogue** : au survol (et au focus clavier) d'une carte qui a une bande-annonce, elle remplace la capsule et se joue ; au repos, la capsule, avec un petit pictogramme de lecture qui annonce qu'il y a quelque chose à voir.
 
-### Tests (`node:test`) — 96 → 121, tous verts
+### Tests (`node:test`) — 96 → 123, tous verts
 
 - `families.test.js` : CRUD, seed idempotent (y compris « table vidée » vs « table entamée »), renommage de slug propagé aux idées et aux filtres, refus 409 avec compte d'idées (corbeille comprise), réordonnancement sans trou ni doublon, refus d'une famille inexistante sur une idée.
-- `trailer.test.js` : `.gif` / `.mp4` / `.webm` en `trailer`, GIF sorti des images, refus au-delà de `MAX_TRAILER_MB` avec la bonne limite citée et rien laissé sur le disque, `trailer_file_id` refusé sur une pièce non-`trailer` ou d'une autre idée, libéré à la suppression, servi au catalogue, purge d'une idée qui en porte une.
+- `trailer.test.js` : `.gif` / `.mp4` / `.webm` en `trailer`, GIF sorti des images, refus au-delà de `MAX_TRAILER_MB` avec la bonne limite citée et rien laissé sur le disque, `trailer_file_id` refusé sur une pièce non-`trailer` ou d'une autre idée, servi au catalogue, purge d'une idée qui en porte une. Et pour les bandes-annonces multiples : la première mène sans rien désigner, une désignation explicite l'emporte, retirer la désignation rend la tête à la première, supprimer celle en tête la passe à la suivante puis à personne.
 - `files.test.js` : `Accept-Ranges`, 206 avec `Content-Range` sur trois formes de plage, 416 hors bornes, `Range` illisible ignoré, et aucune promesse de plage sur un fichier téléchargé.
 - `store-model.test.js` : étiquettes, genre et fonctionnalités lus sur un objet famille ; repli quand la famille manque ; fonctionnalité inconnue ignorée.
 
@@ -41,6 +41,12 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 **`ideas.family` reste du texte, validé par l'application.** Une vraie clé étrangère aurait été plus sûre, mais elle impose de choisir une action sur suppression : `CASCADE` effacerait des idées, `SET NULL` demanderait une colonne nullable et un cas « idée sans famille » partout. Le refus en 409 est plus honnête — il dit ce qui bloque et combien — et le renommage propagé dans la même transaction couvre l'autre moitié du risque.
 
 **Le vocabulaire des fonctionnalités a changé.** Le lot 3b avait `coop` / `multi` / `solo` / `manette` ; le lot demande `solo` / `coop-online` / `multiplayer` / `local-coop`. Le seed traduit à l'identique (`coop` → `coop-online`, `multi` → `multiplayer`), donc aucune fiche n'a changé. **Le support manette n'est pas une fonctionnalité de famille** : il est sur toutes les fiches et s'ajoute dans `storeFeatures`, il n'apparaît donc pas dans les cases de `/familles`.
+
+**Une visionneuse a toujours une première place, donc pas de bouton « retirer ».** La carte en tête n'affiche que son marqueur ; on change de tête en en désignant une autre. Un bouton qui rendrait la première place vide n'aurait rien à produire — le repli du serveur la rattraperait aussitôt.
+
+**La tête est calculée en SQL, pas dans le front.** `COALESCE(trailer_file_id, première pièce trailer)` dans `SELECT_IDEA`, servi en `leading_trailer_id`. Le front pourrait recalculer la même règle — il a la liste des pièces jointes — mais elle vivrait alors à deux endroits, et le catalogue, qui n'a pas cette liste, ne pourrait pas la rejouer. Déposer une vidéo suffit donc à la voir jouer partout, sans penser à la désigner.
+
+**Le rang d'une capture n'est pas son rang dans la visionneuse.** La loupe passe au `Lightbox` un index dans les seules images ; les mélanger décalerait chaque capture du nombre de vidéos qui la précèdent. C'est le seul vrai piège de ce découpage, et il est porté par le type `Slide` plutôt que par de l'arithmétique dispersée.
 
 **Le slug d'une famille ne s'édite pas depuis l'écran.** La route sait le faire, et le fait bien — les idées suivent. Mais c'est un geste qui change la famille de toutes les idées concernées, et le poser à côté d'une case à cocher le banaliserait. Il se lit sur la ligne, en monospace, comme l'identifiant qu'il est. Point laissé ouvert ci-dessous.
 
@@ -68,10 +74,11 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 
 1. **Renommer le slug d'une famille** n'a pas d'interface. La route existe et propage aux idées ; il manque le geste — probablement une petite confirmation qui annonce combien d'idées vont bouger.
 2. **Déplacer les idées d'une famille avant de la supprimer** se fait à la main, idée par idée. Un « déplacer les N idées vers… » dans le refus 409 serait l'étape suivante naturelle.
-3. **Pas de vignette de bande-annonce.** Une vidéo est figée sur sa première image par le navigateur ; c'est suffisant, mais une vraie affiche (posée à la main, ou une image choisie parmi les pièces jointes) serait plus fidèle à un magasin.
-4. **Aucune conversion, aucune limite de durée.** Un `.mp4` de 100 Mo est accepté tel quel et servi tel quel. C'est cohérent avec la règle « les fichiers utilisateur ne vont jamais en base », mais une bande-annonce de trois minutes n'est plus une bande-annonce.
-5. **Les étiquettes n'ont pas d'autocomplétion.** Rien ne suggère « Coop » quand une autre famille la porte déjà, et deux familles peuvent diverger sur une même intention (« Réflexion » / « Puzzle »).
-6. **`local-coop` n'a pas son propre pictogramme** : il partage la silhouette à deux têtes de `coop-online`. À distinguer si la différence devient lisible sur la fiche.
+3. **Pas d'ordre propre aux médias de la visionneuse.** Ils suivent l'ordre des pièces jointes, réordonnable à la poignée — mais mélangé aux markdown, fichiers et liens, qui n'y apparaissent pas. Réordonner ses captures demande donc de faire glisser des cartes qui ne sont pas côte à côte.
+4. **Pas de vignette de bande-annonce.** Une vidéo est figée sur sa première image par le navigateur ; c'est suffisant, mais une vraie affiche (posée à la main, ou une image choisie parmi les pièces jointes) serait plus fidèle à un magasin.
+5. **Aucune conversion, aucune limite de durée.** Un `.mp4` de 100 Mo est accepté tel quel et servi tel quel. C'est cohérent avec la règle « les fichiers utilisateur ne vont jamais en base », mais une bande-annonce de trois minutes n'est plus une bande-annonce.
+6. **Les étiquettes n'ont pas d'autocomplétion.** Rien ne suggère « Coop » quand une autre famille la porte déjà, et deux familles peuvent diverger sur une même intention (« Réflexion » / « Puzzle »).
+7. **`local-coop` n'a pas son propre pictogramme** : il partage la silhouette à deux têtes de `coop-online`. À distinguer si la différence devient lisible sur la fiche.
 
 ---
 
@@ -94,6 +101,10 @@ Deux manques constatés à l'usage juste avant la mise en production : la liste 
 - [ ] Déposer un `.mp4` et un `.webm` : même chose, avec un lecteur en pause dans la carte.
 - [ ] « Définir comme bande-annonce » : le marqueur apparaît, la ligne « Bande-annonce » de la fiche passe à « Définie ».
 - [ ] Page store : la bande-annonce joue en boucle et sans son en première position, et le texte du champ « GIF » est sous le lecteur.
+- [ ] Avec plusieurs vidéos et plusieurs captures : le bandeau les montre toutes, vidéos d'abord ; passer de l'une à l'autre remonte bien le lecteur.
+- [ ] La loupe sur une capture ouvre la bonne image dans la visionneuse (« 2 / 2 », pas un rang décalé par les vidéos).
+- [ ] « Mettre en tête » sur une autre vidéo : elle ouvre la page store, et le catalogue la joue au survol.
+- [ ] Supprimer la vidéo en tête : la suivante prend sa place, sans recharger la page.
 - [ ] La barre apparaît au survol, reste affichée à l'arrêt : pause et relance, position qui avance, durée juste.
 - [ ] Cliquer dans la timeline se déplace dans la vidéo, y compris en arrière — c'est ce que `Range` rend possible.
 - [ ] Le bouton de son rend l'audio à mi-volume ; le curseur le règle, et à zéro il coupe.

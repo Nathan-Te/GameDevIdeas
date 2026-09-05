@@ -120,9 +120,18 @@ export interface Idea {
   capsule_file_id: number | null;
   /** Adresse de cette image, ou `null` tant qu'aucune capsule n'est choisie. */
   capsule_url: string | null;
-  /** Bande-annonce choisie parmi les pièces jointes `trailer` de l'idée. */
+  /**
+   * La bande-annonce **désignée** parmi les pièces `trailer` de l'idée, ou
+   * `null` si Nathan n'en a désigné aucune.
+   */
   trailer_file_id: number | null;
-  /** Adresse de cette bande-annonce, ou `null` s'il n'y en a pas. */
+  /**
+   * Celle qui est réellement en tête : la désignée, ou à défaut la première
+   * pièce `trailer`. La règle vit côté serveur, le front la lit — la visionneuse
+   * du store enchaîne toutes les bandes-annonces, celle-ci d'abord.
+   */
+  leading_trailer_id: number | null;
+  /** Adresse de la bande-annonce en tête, ou `null` s'il n'y en a aucune. */
   trailer_url: string | null;
   /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
   attachment_count: number;

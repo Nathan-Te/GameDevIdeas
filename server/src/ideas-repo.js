@@ -34,8 +34,25 @@ const CAPSULE_JOIN = 'LEFT JOIN attachments c ON c.id = i.capsule_file_id';
 /**
  * Même raison pour la bande-annonce : le catalogue la joue au survol des
  * cartes, donc il lui faut son adresse dans la même requête que la capsule.
+ *
+ * Une idée peut porter plusieurs bandes-annonces — la visionneuse du store les
+ * enchaîne toutes, comme un magasin. Celle **en tête** est celle que Nathan a
+ * désignée ; à défaut, la première dans l'ordre des pièces jointes. Sans ce
+ * repli, déposer une vidéo ne suffirait pas : il faudrait aussi penser à
+ * cliquer « mettre en tête » pour que le catalogue la joue au survol.
+ *
+ * La règle est écrite ici, une fois : le front lit `leading_trailer_id`, il ne
+ * la recalcule pas.
  */
-const TRAILER_JOIN = 'LEFT JOIN attachments t ON t.id = i.trailer_file_id';
+const TRAILER_JOIN = `
+  LEFT JOIN attachments t ON t.id = COALESCE(
+    i.trailer_file_id,
+    (SELECT a.id FROM attachments a
+      WHERE a.idea_id = i.id AND a.kind = 'trailer'
+      ORDER BY a.position, a.id
+      LIMIT 1)
+  )
+`;
 
 const SELECT_IDEA = `
   SELECT i.*,
@@ -44,6 +61,7 @@ const SELECT_IDEA = `
          v.note       AS verdict_note,
          v.created_at AS verdict_created_at,
          c.path       AS capsule_path,
+         t.id         AS leading_trailer_id,
          t.path       AS trailer_path,
          (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count
   FROM ideas i
@@ -67,7 +85,14 @@ export function serializeIdea(row) {
     status: row.status,
     competition: row.competition,
     capsule_file_id: row.capsule_file_id,
+    /** La bande-annonce **désignée**, ou `null` si Nathan n'en a désigné aucune. */
     trailer_file_id: row.trailer_file_id ?? null,
+    /**
+     * Celle qui est réellement en tête : la désignée, ou à défaut la première
+     * pièce `trailer` de l'idée. C'est elle que joue le catalogue au survol et
+     * qui ouvre la visionneuse du store.
+     */
+    leading_trailer_id: row.leading_trailer_id ?? null,
     /**
      * Date de mise en liste de souhaits, `null` sinon. Servie partout où une
      * idée est servie : le catalogue marque ses cartes, la vue store dessine
@@ -77,8 +102,8 @@ export function serializeIdea(row) {
     /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
     capsule_url: fileUrl(row.capsule_path),
     /**
-     * Adresse de la bande-annonce. Servie partout où une idée l'est : le
-     * catalogue la joue au survol, la vue store en tête de visionneuse.
+     * Adresse de la bande-annonce en tête. Servie partout où une idée l'est :
+     * le catalogue la joue au survol, la vue store ouvre dessus.
      */
     trailer_url: fileUrl(row.trailer_path),
     /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */

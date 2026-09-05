@@ -16,6 +16,12 @@ export function IdeaPage({ slug }: { slug: string }) {
   const [missing, setMissing] = useState(false);
   const [saved, setSaved] = useState(false);
   const { families } = useFamilies();
+  /**
+   * Le nombre de bandes-annonces, remonté par la liste des pièces jointes : la
+   * fiche l'annonce, et c'est le seul endroit de la page qui n'a pas la liste
+   * sous la main.
+   */
+  const [trailerCount, setTrailerCount] = useState(0);
   const savedTimer = useRef<number | undefined>(undefined);
   /**
    * Le slug de l'idée en mémoire. Renommer une idée change l'URL — donc la prop
@@ -77,6 +83,21 @@ export function IdeaPage({ slug }: { slug: string }) {
     },
     [idea, flashSaved],
   );
+
+  /**
+   * Relit l'idée sans passer par le chargement initial. Sert quand le serveur a
+   * pu changer un champ tout seul — la bande-annonce en tête après une
+   * suppression, par exemple.
+   */
+  const reload = useCallback(() => {
+    if (!idea) return;
+    api
+      .getIdea(idea.slug)
+      .then(setIdea)
+      .catch(() => {
+        /* L'affichage courant reste valable : ce n'est qu'une resynchronisation. */
+      });
+  }, [idea]);
 
   async function addVerdict(score: number, note: string) {
     if (!idea) return;
@@ -206,7 +227,7 @@ export function IdeaPage({ slug }: { slug: string }) {
           <Attachments
             slug={idea.slug}
             capsuleFileId={idea.capsule_file_id}
-            trailerFileId={idea.trailer_file_id}
+            leadingTrailerId={idea.leading_trailer_id}
             onCapsuleChange={(capsule_file_id) => save({ capsule_file_id })}
             onTrailerChange={(trailer_file_id) => save({ trailer_file_id })}
             onCapsuleLost={() =>
@@ -214,11 +235,10 @@ export function IdeaPage({ slug }: { slug: string }) {
                 current ? { ...current, capsule_file_id: null, capsule_url: null } : current,
               )
             }
-            onTrailerLost={() =>
-              setIdea((current) =>
-                current ? { ...current, trailer_file_id: null, trailer_url: null } : current,
-              )
-            }
+            // La tête a pu passer à la bande-annonce suivante : c'est une règle
+            // du serveur, on relit plutôt que de la rejouer ici.
+            onTrailerLost={reload}
+            onCountChange={setTrailerCount}
           />
 
           <VerdictSection verdicts={verdicts} onSubmit={addVerdict} />
@@ -243,9 +263,11 @@ export function IdeaPage({ slug }: { slug: string }) {
               </select>
             </Row>
 
-            <Row label="Bande-annonce">
+            <Row label="Bandes-annonces">
               <span className="idea__meta">
-                {idea.trailer_url ? 'Définie' : 'Aucune'}
+                {trailerCount === 0
+                  ? 'Aucune'
+                  : `${trailerCount} — la première ouvre la page store`}
               </span>
             </Row>
 
