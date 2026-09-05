@@ -19,49 +19,54 @@ export const OWNER = 'owner';
 export const GUEST = 'guest';
 
 /**
- * L'en-tête que pose le point d'entrée public. Il n'existe que dans un sens :
- * il peut **abaisser** une requête en `guest`, jamais l'élever en `owner`. Un
- * visiteur qui le poserait lui-même ne gagnerait donc rien — il se fermerait
- * les portes qu'il a déjà fermées.
+ * Le marqueur du point d'entrée public.
+ *
+ * Un `Symbol` posé sur l'objet requête de Node par le serveur qui écoute sur
+ * `PUBLIC_PORT` (`public-entry.js`), avant même que Fastify ne voie la requête.
+ * Ce n'est ni un en-tête, ni une adresse : c'est une propriété d'un objet du
+ * processus, qu'aucun client ne peut écrire — il n'existe aucun octet à envoyer
+ * sur le réseau qui la produise.
+ *
+ * **C'est le seul critère de classification, et il n'y en aura pas d'autre.**
+ * Le lot 7 en a d'abord eu trois — le port, l'adresse source, un en-tête de
+ * Tailscale — et les deux derniers ont été retirés au premier contact avec la
+ * production. Voir la note de `classify`.
  */
-const PUBLIC_HEADER = 'x-vitrine-public';
+export const PUBLIC_ENTRY = Symbol.for('vitrine.public-entry');
 
-/**
- * Tailscale marque les requêtes venues de Funnel avec cet en-tête. On l'honore
- * — c'est un signal de plus dans le bon sens — mais **on ne s'y fie jamais
- * seul** : le mécanisme sur lequel repose la séparation est le port d'écoute
- * distinct (voir `Docs/exposition-publique.md`), parce qu'un en-tête est une
- * promesse et un port est un fait.
- */
-const FUNNEL_HEADER = 'tailscale-funnel-request';
-
-/** `100.64.0.0/10` : la plage du tailnet, celle des adresses `tailscale ip`. */
-const TAILNET_V4 = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./;
-/** `fd7a:115c:a1e0::/48` : la même chose en IPv6. */
-const TAILNET_V6 = /^fd7a:115c:a1e0:/i;
-
-function isPrivateAddress(address) {
-  if (!address) return false;
-  // `::ffff:127.0.0.1` : une adresse v4 vue par une pile v6.
-  const ip = address.replace(/^::ffff:/i, '').toLowerCase();
-
-  if (ip === '::1' || ip === '127.0.0.1' || /^127\./.test(ip)) return true;
-  return TAILNET_V4.test(ip) || TAILNET_V6.test(ip);
+/** Appelé par le point d'entrée public, une fois par requête, avant le routage. */
+export function markPublicRequest(req) {
+  req[PUBLIC_ENTRY] = true;
 }
 
 /**
- * Classe une requête. `guest` est le défaut : tout ce qui n'est pas
- * démontrablement Nathan est un visiteur.
+ * Classe une requête : `guest` si elle est entrée par le point d'entrée public,
+ * `owner` sinon. Rien d'autre n'est regardé.
  *
- * L'adresse lue est celle de la **socket**, jamais `X-Forwarded-For` : un
- * en-tête d'adresse est écrit par l'appelant, donc un visiteur pourrait s'y
- * déclarer sur le tailnet. C'est aussi la raison pour laquelle Fastify tourne
- * sans `trustProxy`.
+ * **Pourquoi ni l'adresse, ni un en-tête.** Les deux ont été essayés et les deux
+ * sont faux :
+ *
+ * - **L'adresse source ment dès qu'il y a un intermédiaire, et il y en a
+ *   toujours un.** Derrière Tailscale Funnel, `tailscaled` termine TLS puis
+ *   proxifie vers la cible locale : tout le trafic public se présente depuis la
+ *   machine elle-même. En conteneur Docker, c'est l'inverse et c'est pire —
+ *   toutes les requêtes, y compris celles de Nathan sur son propre port,
+ *   arrivent par la passerelle du réseau bridge (`172.x.0.1`), donc d'une
+ *   adresse qui n'est ni la boucle locale ni le tailnet. Une classification par
+ *   IP y répondait 404 à Nathan sur son propre port. C'est arrivé en
+ *   production.
+ * - **Un en-tête est une promesse d'un composant qu'on ne contrôle pas.** Qu'il
+ *   soit posé par un proxy amont ou par l'appelant, rien dans la requête ne
+ *   permet de faire la différence. Un en-tête peut disparaître d'une version à
+ *   l'autre du proxy, et l'instance s'ouvre alors en silence.
+ *
+ * Le port d'écoute, lui, est un fait de transport : la requête est entrée par
+ * une socket ou par l'autre, il n'y a pas de troisième possibilité et personne
+ * ne peut mentir dessus.
  */
 export function classify(request) {
-  if (request.headers[PUBLIC_HEADER] !== undefined) return GUEST;
-  if (request.headers[FUNNEL_HEADER] !== undefined) return GUEST;
-  return isPrivateAddress(request.socket?.remoteAddress) ? OWNER : GUEST;
+  const raw = request?.raw ?? request;
+  return raw?.[PUBLIC_ENTRY] === true ? GUEST : OWNER;
 }
 
 /**

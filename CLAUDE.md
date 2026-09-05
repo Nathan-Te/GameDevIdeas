@@ -26,6 +26,13 @@ Reprises telles quelles de la section 8 du seed :
 
 ### Règles ajoutées au lot 7 (ouverture sur Internet)
 
+- **Le seul critère qui sépare Nathan d'un visiteur est le port d'écoute par
+  lequel la requête est entrée.** Jamais l'adresse source, jamais un en-tête :
+  les deux ont été essayés au lot 7 et retirés au lot 7b. L'adresse ment dès
+  qu'il y a un intermédiaire — Funnel présente tout depuis la machine, Docker
+  présente tout depuis la passerelle du bridge, y compris les requêtes de
+  Nathan — et un en-tête est une promesse d'un composant qu'on ne contrôle pas.
+  Voir [`Docs/exposition-publique.md`](Docs/exposition-publique.md) §2.
 - **Les routes accessibles sans authentification sont une liste blanche
   explicite ; toute route non listée répond 404 à un visiteur public.** La liste
   vit dans `server/src/access.js` — 404 et non 403, pour qu'une route fermée soit
@@ -51,7 +58,14 @@ cassants en production :
 1. le proxy Vite — une route servie par Fastify et absente du proxy renvoie du HTML en 200 ;
 2. `shared/` absent du `Dockerfile`, aux deux étages ;
 3. la réouverture de connexion à la base ;
-4. la bascule de restauration sur un point de montage (`EBUSY`, lot 6b).
+4. la bascule de restauration sur un point de montage (`EBUSY`, lot 6b) ;
+5. la classification `owner`/`guest` par adresse source (lot 7b) — en conteneur,
+   toutes les requêtes arrivent par la passerelle du réseau bridge, y compris
+   celles de Nathan, et l'application répondait 404 sur son propre port. Les
+   52 tests de la porte passaient tous par `inject`, qui présente les requêtes
+   depuis `127.0.0.1` : ils vérifiaient scrupuleusement un mécanisme qui n'était
+   pas celui de la production. C'est le premier de la famille à toucher la
+   sécurité.
 
 En pratique : `npm run test:container`, et un fichier de test qui **refuse de
 passer** quand la destination n'est pas réellement montée
@@ -175,6 +189,7 @@ l'adresse source, et ce qu'il faut vérifier depuis l'extérieur du tailnet.
 - **Lot 6 — Peuplement** : livré. Les quatorze idées de `Docs/fiches-vitrine-14.md`, créées par l'API avec `scripts/seed-ideas.mjs` (idempotent, repérage par titre), et l'archive à transporter sur le serveur.
 - **Lot 6b — Bascule sur point de montage** : livré. La restauration remplace le *contenu* de `data/files`, jamais le dossier — un point de montage ne se renomme pas (`EBUSY`) et `rename` n'en traverse pas la frontière (`EXDEV`). Nettoyage des `.incoming` orphelins au démarrage, et `npm run test:container` pour l'exercer là où c'est vrai.
 
+- **Lot 7b — La porte se décide sur le port** : livré. La classification par adresse source et l'en-tête `Tailscale-Funnel-Request` sont supprimés ; un `Symbol` posé par le point d'entrée public (`server/src/public-entry.js`) est le seul critère. Tests sur de vrais sockets, depuis une adresse ni locale ni tailnet, et à travers le NAT Docker — [`Docs/lots/lot-07b-porte-par-port.md`](Docs/lots/lot-07b-porte-par-port.md).
 - **Lot 7 — Partage public et avis d'amis** : livré. Sélections partagées par lien, page invité `/p/:token/:slug`, avis et listes de souhaits d'amis (migration `006`), liste blanche de routes et point d'entrée public, écran `/partages`. **L'application est exposable sur Internet** — la marche à suivre est dans [`Docs/exposition-publique.md`](Docs/exposition-publique.md).
 
 ## Modèle de données
@@ -221,6 +236,7 @@ server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
   src/            config, db, migrate, routes, validation, dépôts SQL,
                   access.js (la porte : owner/guest, liste blanche, 404),
+                  public-entry.js (le point d'entrée public — le seul critère),
                   shares-repo.js (sélections, avis d'amis, souhaits d'invités),
                   rate-limit.js (le débit des soumissions, en mémoire),
                   files.js (disque, garde de chemin, `Range`), links.js (liens typés),

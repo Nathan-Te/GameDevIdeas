@@ -14,8 +14,9 @@ vraiment, et comment refermer.
 ## 1. Le principe : la séparation se fait par route, côté serveur
 
 Il n'y a pas d'authentification, et il n'y en aura pas. Chaque requête est
-classée `owner` ou `guest` par `server/src/access.js`, et un `guest` n'atteint
-que six choses :
+classée `owner` ou `guest` par `server/src/access.js` — **sur le seul port
+d'écoute par lequel elle est entrée**, voir la section 2 — et un `guest`
+n'atteint que six choses :
 
 | Route | Méthode |
 |---|---|
@@ -32,32 +33,52 @@ blanche : une route ajoutée demain est fermée sans que personne ait à y pense
 
 ---
 
-## 2. Le point technique central : pourquoi un port et pas une adresse
+## 2. Le point technique central : le port, et rien d'autre
 
-La classification pourrait, en théorie, se faire sur l'adresse source :
-`100.64.0.0/10` et la boucle locale sont Nathan, tout le reste est un visiteur.
-`access.js` sait le faire, et le fait — mais **ce n'est pas sur quoi la
-séparation repose**, et il faut comprendre pourquoi.
+**Le seul critère de classification est le port d'écoute par lequel la requête
+est entrée.** Une requête entrée par `PORT` est `owner`, une requête entrée par
+`PUBLIC_PORT` est `guest`. Sans exception, sans repli sur l'adresse source, sans
+en-tête.
 
-Tailscale Funnel ne renvoie pas le trafic public tel quel vers l'application.
-`tailscaled` termine TLS lui-même sur le nœud, puis **proxifie** la requête vers
-la cible locale que vous lui avez donnée (`tailscale funnel 3003` proxifie vers
-`127.0.0.1:3003`). La connexion que l'application voit arriver part donc de la
-machine elle-même. Du point de vue de la socket, une requête venue de Tokyo et
-une requête de Nathan depuis son portable sur le tailnet sont **identiques**.
+Ce n'est pas une simplification élégante : c'est ce qui reste après avoir essayé
+les deux autres critères et vu les deux échouer.
 
-> Conclusion, et c'est le point qu'il ne faut pas survoler : **derrière Funnel,
-> la classification par adresse source est inopérante.** Une instance qui ne
-> classerait que par IP servirait `/api/backup` au premier venu.
+### Pourquoi pas l'adresse source
 
-Tailscale pose bien un en-tête `Tailscale-Funnel-Request` sur les requêtes
-venues de Funnel, et Vitrine l'honore — mais **en signal secondaire seulement**.
-Un en-tête est une promesse d'un composant tiers ; s'il change de nom, disparaît
-d'une version à l'autre ou n'est pas posé dans une configuration particulière,
-une instance qui n'aurait que lui s'ouvrirait en silence. On ne construit pas une
-frontière sur une promesse dont on ne contrôle pas la tenue.
+Elle ment dès qu'il y a un intermédiaire — et il y en a toujours un.
 
-### Le mécanisme retenu : un port d'écoute distinct
+- **Derrière Tailscale Funnel**, `tailscaled` termine TLS lui-même sur le nœud
+  puis **proxifie** la requête vers la cible locale (`tailscale funnel 3003`
+  proxifie vers `127.0.0.1:3003`). Tout le trafic public se présente donc depuis
+  la machine elle-même : du point de vue de la socket, une requête venue de
+  Tokyo et une requête de Nathan sur le tailnet sont identiques. Une
+  classification par IP y aurait servi `/api/backup` au premier venu.
+- **En conteneur Docker**, c'est l'inverse, et c'est ce qui est arrivé. Les
+  ports publiés font passer **toutes** les requêtes par la passerelle du réseau
+  bridge (`172.x.0.1`) — celles de Nathan comprises. L'adresse n'est alors ni la
+  boucle locale ni le tailnet : la première version de la porte classait donc
+  Nathan lui-même en visiteur, et **l'application répondait 404 sur son propre
+  port**. En production.
+
+Un critère qui se trompe dans les deux sens selon l'infrastructure n'est pas un
+critère. Il a été retiré.
+
+### Pourquoi pas un en-tête
+
+`Tailscale-Funnel-Request`, posé par Tailscale sur les requêtes venues de
+Funnel, était honoré en signal secondaire. Il ne l'est plus non plus.
+
+Un en-tête est une promesse d'un composant qu'on ne contrôle pas. Rien dans une
+requête ne distingue un en-tête posé par un proxy d'un en-tête écrit par
+l'appelant ; il peut changer de nom, disparaître d'une version à l'autre, ou ne
+pas être posé dans une configuration particulière — et l'instance s'ouvre alors
+en silence. Deux critères faux ne font pas un critère juste : ils font deux
+façons de se tromper.
+
+`X-Forwarded-For` n'est lu nulle part, pour la même raison. Fastify tourne sans
+`trustProxy`, exprès.
+
+### Le mécanisme retenu
 
 Vitrine écoute sur **deux ports** :
 
@@ -66,38 +87,42 @@ Vitrine écoute sur **deux ports** :
 - `PUBLIC_PORT` (3003 par exemple) — le **point d'entrée public**, à publier sur
   `127.0.0.1` uniquement, et c'est lui que Funnel vise.
 
-Les deux servent la même application. Le second est un `http.Server` qui
-réécrit `X-Vitrine-Public: 1` sur chaque requête avant de la passer au routeur de
-Fastify (`server/src/index.js`). L'en-tête entrant est **écrasé**, jamais lu :
-un appelant ne choisit pas son camp.
+Les deux servent la même application. Le second (`server/src/public-entry.js`)
+pose un `Symbol` sur l'objet requête de Node avant de la router. Ce n'est ni un
+en-tête ni une adresse : c'est une propriété d'un objet du processus, et il
+n'existe aucun octet à envoyer sur le réseau qui la produise. La requête est
+entrée par une socket ou par l'autre ; il n'y a pas de troisième cas.
 
-C'est un fait de transport et non une déclaration : une requête entrée par le
-port public est un visiteur, quoi qu'elle raconte d'elle-même, quelle que soit
-son adresse, et quels que soient les en-têtes qu'elle porte. Aucun `X-Forwarded-For`
-n'est lu nulle part — Fastify tourne sans `trustProxy`, précisément pour ça.
-
-Sans `PUBLIC_PORT`, aucun point d'entrée public n'est ouvert et l'instance est
-exactement ce qu'elle était avant le lot 7.
+> **Corollaire à ne pas perdre de vue : c'est le port public qui fabrique les
+> visiteurs.** Sans `PUBLIC_PORT`, tout est `owner` — ce qui est le bon
+> comportement pour une instance qui n'est pas exposée, mais qui veut dire que
+> **pointer Funnel sur `PORT` au lieu de `PUBLIC_PORT` ouvrirait toute
+> l'application**. Le serveur refuse de démarrer si les deux ports sont égaux,
+> et la vérification de la section 5 est là pour le reste.
 
 ### Ce qui a été vérifié, et où
 
-- **Vérifié en local, sur les deux ports d'un vrai serveur** (pas seulement par
-  `inject`) : `GET /api/ideas` répond `200` sur le port de Nathan et
-  `{"error":"not_found"}` en `404` sur le port public ; `GET /` sert
-  l'application sur l'un et `404` sur l'autre ; `GET /p/<jeton>` sert la page
-  invité sur les deux.
-- **Vérifié par les tests** (`server/test/sharing.test.js`) : trente routes
-  fermées, une à une, plus la classification par adresse et par en-tête.
+- **`server/test/public-entry.test.js`** lance le vrai serveur sur ses deux
+  ports, écoute sur toutes les interfaces, et l'interroge **depuis une adresse
+  qui n'est ni la boucle locale ni le tailnet** — le cas Docker. Il vérifie que
+  le port de Nathan répond 200, que le port public répond 404 sur la même route
+  depuis la même adresse, et — en écoutant les serveurs HTTP eux-mêmes — que
+  l'adresse vue était bien étrangère. S'il n'en trouve aucune sur la machine, il
+  **échoue** au lieu de se sauter.
+- **`npm run test:container`** refait la même vérification à travers le réseau
+  Docker : image de production, ports publiés, `curl` depuis l'hôte. C'est le
+  décor exact du défaut.
+- **`server/test/sharing.test.js`** vérifie les trente routes fermées, une à
+  une, par le vrai port public — plus le fait qu'aucun en-tête ne déplace la
+  frontière, dans un sens comme dans l'autre.
 - **À vérifier une fois en ligne, par vous, depuis l'extérieur du tailnet** :
-  la section 5 en donne la liste. Le comportement exact de Funnel sur *votre*
-  version de Tailscale ne se vérifie que chez vous — mais le mécanisme choisi ne
-  dépend pas de ce comportement, et c'est tout l'intérêt.
+  la section 5 en donne la liste.
 
 ### Éprouver la porte sans quitter son poste
 
-`npm run dev` ne suffit pas : Vite sert le front et proxifie vers Fastify depuis
-la boucle locale, donc tout y est classé `owner`. Pour voir l'application comme
-un visiteur, il faut le vrai serveur et ses deux ports :
+`npm run dev` ne suffit pas : il n'ouvre pas de point d'entrée public, donc tout
+y est classé `owner`. Pour voir l'application comme un visiteur, il faut le vrai
+serveur et ses deux ports :
 
 ```bash
 npm run build
@@ -178,6 +203,11 @@ https://<nom-de-la-machine>.<nom-du-tailnet>.ts.net
 C'est cette adresse que vos amis utiliseront. Elle n'a ni port ni chemin :
 Funnel écoute en 443 et proxifie vers `127.0.0.1:3003`.
 
+**Le numéro passé à `tailscale funnel` doit être `PUBLIC_PORT`, jamais `PORT`.**
+C'est le port qui fait la frontière : le viser sur celui de Nathan publierait
+l'application entière, sauvegardes comprises. La section 5 le vérifie depuis
+l'extérieur, et c'est la seule vérification qui prouve quoi que ce soit.
+
 `tailscale funnel status` liste ce qui est publié.
 
 ### 3.3. Dire l'adresse à l'écran des partages
@@ -205,6 +235,17 @@ elle est retenue dans le navigateur, et tous les liens et QR codes s'y adaptent.
 
 Toutes les réponses portent `X-Robots-Tag: noindex, nofollow`, et les pages
 portent la balise `robots` correspondante.
+
+### Une conséquence à connaître : la limite de débit est commune
+
+La limite de 30 soumissions par heure est comptée sur un hachage de l'adresse
+source. Derrière Funnel comme derrière Docker, cette adresse est la même pour
+tout le monde : **le compteur est donc global**, et non par visiteur.
+
+Pour une poignée d'amis c'est une protection acceptable — elle plafonne le
+volume d'écriture total. Mais un ami bavard peut, en théorie, épuiser le quota
+des autres pour l'heure. Si ça arrive, c'est le signe qu'il faut compter
+autrement ; en attendant, `GUEST_SUBMIT_LIMIT` se relève.
 
 ---
 
@@ -249,6 +290,16 @@ Remplacer `https://exemple.ts.net` par l'URL de Funnel.
 7. **La limite de débit mord.** Facultatif, mais rassurant : basculer la liste
    de souhaits une trentaine de fois d'affilée finit par un message clair et un
    `429`.
+
+8. **Et le contrôle symétrique, depuis le tailnet** : votre propre application
+   répond toujours. C'est l'autre moitié de la porte, et c'est celle qui a
+   lâché la première fois — en conteneur, toutes les requêtes arrivent par la
+   passerelle Docker, et une classification par adresse répondait 404 à Nathan
+   sur son propre port.
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://100.x.y.z:3000/api/ideas   # 200
+   ```
 
 Côté serveur, `docker compose logs -f vitrine` montre les requêtes des visiteurs.
 Un `404` sur `/api/ideas` dans ce journal n'est pas une erreur : c'est la porte

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { classify, GUEST, isGuestAllowed, OWNER } from '../src/access.js';
+import { classify, GUEST, isGuestAllowed, markPublicRequest, OWNER } from '../src/access.js';
 
-import { asVisitor, del, get, guest, makeApp, patch, post, seedIdea } from './helpers.js';
+import { asVisitor, del, get, guest, makeServed, patch, post, seedIdea } from './helpers.js';
 
 /**
  * Le lot 7 ouvre l'application sur Internet. Ce fichier est donc moins une
@@ -72,10 +72,11 @@ describe('la porte : ce qui est fermé au visiteur', () => {
 
   for (const [method, url] of FERMEES) {
     test(`${method} ${url} répond 404 à un visiteur`, async (t) => {
-      const { app } = await makeApp(t);
+      const served = await makeServed(t);
+    const { app } = served;
       await seedShare(app);
 
-      const res = await guest(app, method, url, {});
+      const res = await guest(served, method, url, {});
 
       assert.equal(res.status, 404, `${method} ${url} n'est pas fermée`);
       assert.equal(res.body.error, 'not_found');
@@ -85,7 +86,8 @@ describe('la porte : ce qui est fermé au visiteur', () => {
   }
 
   test('les mêmes routes répondent normalement à Nathan', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     await seedShare(app);
 
     for (const url of ['/api/ideas', '/api/families', '/api/shares', '/api/backups']) {
@@ -94,44 +96,49 @@ describe('la porte : ce qui est fermé au visiteur', () => {
   });
 
   test('une route inventée est fermée sans que personne ait eu à l’inscrire', async (t) => {
-    const { app } = await makeApp(t);
-    const res = await guest(app, 'GET', '/api/statistiques-secretes');
+    const served = await makeServed(t);
+    const { app } = served;
+    const res = await guest(served, 'GET', '/api/statistiques-secretes');
     assert.equal(res.status, 404);
   });
 
   test('le repli SPA ne s’ouvre au visiteur que sous /p/', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
 
     // Sans front construit, la réponse est un 404 JSON dans les deux cas ; ce
     // qui compte est que la porte réponde avant même de savoir s'il y en a un.
     for (const url of ['/', '/idees/dedans', '/sauvegarde', '/partages']) {
-      const res = await guest(app, 'GET', url);
+      const res = await guest(served, 'GET', url);
       assert.equal(res.status, 404, url);
     }
   });
 
   test('toute réponse porte X-Robots-Tag', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share } = await seedShare(app);
 
-    const res = await guest(app, 'GET', `/api/share/${share.token}`);
+    const res = await guest(served, 'GET', `/api/share/${share.token}`);
     assert.match(res.headers['x-robots-tag'], /noindex/);
   });
 });
 
 describe('le lien de partage', () => {
   test('le jeton fait 43 caractères de base64url', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share } = await seedShare(app);
 
     assert.match(share.token, /^[A-Za-z0-9_-]{43}$/);
   });
 
   test('un visiteur lit la sélection et ses idées, dans l’ordre', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans, encore } = await seedShare(app);
 
-    const res = await guest(app, 'GET', `/api/share/${share.token}`);
+    const res = await guest(served, 'GET', `/api/share/${share.token}`);
 
     assert.equal(res.status, 200);
     assert.equal(res.body.share.label, 'Les copains');
@@ -142,14 +149,15 @@ describe('le lien de partage', () => {
   });
 
   test('la sélection ne laisse filtrer ni verdict ni liste de souhaits de Nathan', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     await post(app, `/api/ideas/${dedans.slug}/verdicts`, { score: 5, note: 'la mienne' });
     await patch(app, `/api/ideas/${dedans.slug}`, { wishlisted: true });
 
-    const liste = await guest(app, 'GET', `/api/share/${share.token}`);
-    const page = await guest(app, 'GET', `/api/share/${share.token}/ideas/${dedans.slug}`);
+    const liste = await guest(served, 'GET', `/api/share/${share.token}`);
+    const page = await guest(served, 'GET', `/api/share/${share.token}/ideas/${dedans.slug}`);
 
     const serialise = JSON.stringify([liste.body, page.body]);
     assert.doesNotMatch(serialise, /la mienne/);
@@ -160,27 +168,29 @@ describe('le lien de partage', () => {
   });
 
   test('une idée hors sélection répond 404 même si elle existe', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dehors } = await seedShare(app);
 
     // Elle existe bel et bien pour Nathan.
     assert.equal((await get(app, `/api/ideas/${dehors.slug}`)).status, 200);
 
-    const res = await guest(app, 'GET', `/api/share/${share.token}/ideas/${dehors.slug}`);
+    const res = await guest(served, 'GET', `/api/share/${share.token}/ideas/${dehors.slug}`);
     assert.equal(res.status, 404);
   });
 
   test('un lien inconnu, révoqué ou expiré donnent le même 404, mot pour mot', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
 
     const { share: revoque } = await seedShare(app);
     await post(app, `/api/shares/${revoque.id}/revoke`, {});
 
     const { share: expire } = await seedShare(app, { expires_at: '2020-01-01' });
 
-    const inconnu = await guest(app, 'GET', '/api/share/aaaaaaaaaaaaaaaaaaaaaaaa');
-    const revoked = await guest(app, 'GET', `/api/share/${revoque.token}`);
-    const expired = await guest(app, 'GET', `/api/share/${expire.token}`);
+    const inconnu = await guest(served, 'GET', '/api/share/aaaaaaaaaaaaaaaaaaaaaaaa');
+    const revoked = await guest(served, 'GET', `/api/share/${revoque.token}`);
+    const expired = await guest(served, 'GET', `/api/share/${expire.token}`);
 
     for (const res of [inconnu, revoked, expired]) {
       assert.equal(res.status, 404);
@@ -189,7 +199,8 @@ describe('le lien de partage', () => {
   });
 
   test('révoquer ne supprime pas la sélection : Nathan la voit encore', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share } = await seedShare(app);
 
     await post(app, `/api/shares/${share.id}/revoke`, {});
@@ -212,16 +223,17 @@ describe('les avis d’amis', () => {
   });
 
   test('un visiteur dépose un avis, et le relit sur sa page', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
-    const res = await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    const res = await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
     assert.equal(res.status, 201);
     assert.equal(res.body.my_review.author_name, 'Léo');
     assert.equal(res.body.my_review.score, 4);
 
     const page = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}/ideas/${dedans.slug}`,
       undefined,
@@ -232,12 +244,13 @@ describe('les avis d’amis', () => {
   });
 
   test('le même visitor_id corrige son avis au lieu d’en ajouter un', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
     const corrige = await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { score: 1, note: 'En fait non.' }),
@@ -253,12 +266,13 @@ describe('les avis d’amis', () => {
   });
 
   test('un autre visiteur ne touche pas à l’avis du premier', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
     await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { visitor_id: AUTRE, author_name: 'Manon', score: 2 }),
@@ -272,13 +286,14 @@ describe('les avis d’amis', () => {
   });
 
   test('un avis n’écrit ni dans verdicts, ni sur updated_at de l’idée', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     const avant = (await get(app, `/api/ideas/${dedans.slug}`)).body;
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
-    await guest(app, 'POST', `/api/share/${share.token}/wishlist`, {
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    await guest(served, 'POST', `/api/share/${share.token}/wishlist`, {
       slug: dedans.slug,
       visitor_id: VISITOR,
       wishlisted: true,
@@ -295,19 +310,20 @@ describe('les avis d’amis', () => {
   });
 
   test('reviews_visible masque les avis des autres, jamais le sien', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app, { reviews_visible: false });
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
     await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { visitor_id: AUTRE, author_name: 'Manon' }),
     );
 
     const page = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}/ideas/${dedans.slug}`,
       undefined,
@@ -320,11 +336,12 @@ describe('les avis d’amis', () => {
   });
 
   test('le prénom est borné à 40 caractères et le commentaire à 2000', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     const trop = await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { author_name: 'x'.repeat(41) }),
@@ -332,7 +349,7 @@ describe('les avis d’amis', () => {
     assert.equal(trop.status, 400);
 
     const long = await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { note: 'x'.repeat(2001) }),
@@ -341,10 +358,11 @@ describe('les avis d’amis', () => {
   });
 
   test('Nathan supprime un avis, et rien d’autre ne bouge', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug));
     const [recu] = (await get(app, `/api/ideas/${dedans.slug}/reviews`)).body.reviews;
 
     assert.equal((await del(app, `/api/reviews/${recu.id}`)).status, 200);
@@ -353,18 +371,19 @@ describe('les avis d’amis', () => {
   });
 
   test('le catalogue porte la moyenne des amis et le nombre de souhaits, et sait trier dessus', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans, encore } = await seedShare(app);
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug, { score: 2 }));
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(dedans.slug, { score: 2 }));
     await guest(
-      app,
+      served,
       'POST',
       `/api/share/${share.token}/reviews`,
       avis(dedans.slug, { visitor_id: AUTRE, score: 4 }),
     );
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, avis(encore.slug, { score: 5 }));
-    await guest(app, 'POST', `/api/share/${share.token}/wishlist`, {
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, avis(encore.slug, { score: 5 }));
+    await guest(served, 'POST', `/api/share/${share.token}/wishlist`, {
       slug: encore.slug,
       visitor_id: VISITOR,
       wishlisted: true,
@@ -384,14 +403,15 @@ describe('les avis d’amis', () => {
 
 describe('la liste de souhaits du visiteur', () => {
   test('elle se bascule dans les deux sens et n’est pas celle de Nathan', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     const body = { slug: dedans.slug, visitor_id: VISITOR, wishlisted: true };
-    assert.equal((await guest(app, 'POST', `/api/share/${share.token}/wishlist`, body)).status, 200);
+    assert.equal((await guest(served, 'POST', `/api/share/${share.token}/wishlist`, body)).status, 200);
 
     const page = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}/ideas/${dedans.slug}`,
       undefined,
@@ -401,7 +421,7 @@ describe('la liste de souhaits du visiteur', () => {
 
     // Un autre visiteur n'hérite pas de la case cochée par le premier.
     const autre = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}/ideas/${dedans.slug}`,
       undefined,
@@ -409,9 +429,9 @@ describe('la liste de souhaits du visiteur', () => {
     );
     assert.equal(autre.body.wishlisted, false);
 
-    await guest(app, 'POST', `/api/share/${share.token}/wishlist`, { ...body, wishlisted: false });
+    await guest(served, 'POST', `/api/share/${share.token}/wishlist`, { ...body, wishlisted: false });
     const apres = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}/ideas/${dedans.slug}`,
       undefined,
@@ -421,23 +441,24 @@ describe('la liste de souhaits du visiteur', () => {
   });
 
   test('le récapitulatif dit ce que la base sait, pas ce que le navigateur croit', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans, encore } = await seedShare(app);
 
-    await guest(app, 'POST', `/api/share/${share.token}/reviews`, {
+    await guest(served, 'POST', `/api/share/${share.token}/reviews`, {
       slug: dedans.slug,
       visitor_id: VISITOR,
       author_name: 'Léo',
       score: 3,
     });
-    await guest(app, 'POST', `/api/share/${share.token}/wishlist`, {
+    await guest(served, 'POST', `/api/share/${share.token}/wishlist`, {
       slug: encore.slug,
       visitor_id: VISITOR,
       wishlisted: true,
     });
 
     const res = await guest(
-      app,
+      served,
       'GET',
       `/api/share/${share.token}`,
       undefined,
@@ -453,20 +474,21 @@ describe('la liste de souhaits du visiteur', () => {
 
 describe('la limite de débit', () => {
   test('la 31ᵉ soumission d’une même adresse répond 429 avec un message clair', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     const body = { slug: dedans.slug, visitor_id: VISITOR, wishlisted: true };
 
     for (let n = 0; n < 30; n += 1) {
-      const res = await guest(app, 'POST', `/api/share/${share.token}/wishlist`, {
+      const res = await guest(served, 'POST', `/api/share/${share.token}/wishlist`, {
         ...body,
         wishlisted: n % 2 === 0,
       });
       assert.equal(res.status, 200, `soumission ${n + 1}`);
     }
 
-    const refuse = await guest(app, 'POST', `/api/share/${share.token}/wishlist`, body);
+    const refuse = await guest(served, 'POST', `/api/share/${share.token}/wishlist`, body);
     assert.equal(refuse.status, 429);
     assert.match(refuse.body.message, /Réessaie/);
     // Aucune pile, aucun nom de fichier, aucune version.
@@ -474,18 +496,19 @@ describe('la limite de débit', () => {
   });
 
   test('un avis refusé pour débit n’est pas enregistré', async (t) => {
-    const { app } = await makeApp(t);
+    const served = await makeServed(t);
+    const { app } = served;
     const { share, dedans } = await seedShare(app);
 
     for (let n = 0; n < 30; n += 1) {
-      await guest(app, 'POST', `/api/share/${share.token}/wishlist`, {
+      await guest(served, 'POST', `/api/share/${share.token}/wishlist`, {
         slug: dedans.slug,
         visitor_id: VISITOR,
         wishlisted: n % 2 === 0,
       });
     }
 
-    const refuse = await guest(app, 'POST', `/api/share/${share.token}/reviews`, {
+    const refuse = await guest(served, 'POST', `/api/share/${share.token}/reviews`, {
       slug: dedans.slug,
       visitor_id: VISITOR,
       author_name: 'Léo',
@@ -498,38 +521,58 @@ describe('la limite de débit', () => {
 });
 
 describe('la classification d’une requête', () => {
-  const from = (address, headers = {}) => classify({ headers, socket: { remoteAddress: address } });
-
-  test('le tailnet et la machine elle-même sont Nathan', () => {
-    assert.equal(from('100.101.102.103'), OWNER);
-    assert.equal(from('fd7a:115c:a1e0::1234'), OWNER);
-    assert.equal(from('127.0.0.1'), OWNER);
-    assert.equal(from('::1'), OWNER);
-    assert.equal(from('::ffff:127.0.0.1'), OWNER);
+  /** Ce que voit `classify` : l'objet requête de Node, marqué ou non. */
+  const arriving = (address, headers = {}) => ({
+    raw: { headers, socket: { remoteAddress: address } },
+    headers,
+    socket: { remoteAddress: address },
   });
 
-  test('tout le reste est un visiteur', () => {
-    assert.equal(from('93.184.216.34'), GUEST);
-    assert.equal(from('192.168.1.10'), GUEST, 'le réseau local n’est pas le tailnet');
-    // 100.128.x n'est pas dans 100.64.0.0/10 : c'est de l'espace public.
-    assert.equal(from('100.128.0.1'), GUEST);
-    assert.equal(from(undefined), GUEST);
+  test('sans marqueur, c’est Nathan — quelle que soit l’adresse', () => {
+    // La boucle locale et le tailnet, évidemment.
+    assert.equal(classify(arriving('127.0.0.1')), OWNER);
+    assert.equal(classify(arriving('100.101.102.103')), OWNER);
+
+    // Et surtout : la passerelle d'un réseau bridge Docker. C'est par elle
+    // qu'arrivent **toutes** les requêtes en conteneur, celles de Nathan
+    // comprises. La première version du lot 7 les classait visiteur, et
+    // l'application répondait 404 sur son propre port, en production.
+    assert.equal(classify(arriving('172.20.0.1')), OWNER);
+    assert.equal(classify(arriving('172.17.0.1')), OWNER);
+    assert.equal(classify(arriving('192.168.1.10')), OWNER);
+    assert.equal(classify(arriving('93.184.216.34')), OWNER);
+    assert.equal(classify(arriving(undefined)), OWNER);
   });
 
-  test('un en-tête peut fermer une porte, jamais en ouvrir une', () => {
-    // Le point d'entrée public abaisse une requête pourtant locale.
-    assert.equal(from('127.0.0.1', { 'x-vitrine-public': '1' }), GUEST);
-    assert.equal(from('127.0.0.1', { 'tailscale-funnel-request': '?1' }), GUEST);
+  test('avec le marqueur du point d’entrée public, c’est un visiteur', () => {
+    const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } };
+    markPublicRequest(req);
+    assert.equal(classify({ raw: req, headers: {}, socket: req.socket }), GUEST);
+    // Le marqueur se lit aussi sur l'objet nu, tel que le voit `public-entry`.
+    assert.equal(classify(req), GUEST);
+  });
 
-    // Et rien de ce qu'un visiteur peut écrire ne le fait passer pour Nathan.
+  test('aucun en-tête ne déplace la frontière, dans un sens ou dans l’autre', () => {
     for (const headers of [
+      // Ceux que la première version honorait : ils ne veulent plus rien dire.
+      { 'x-vitrine-public': '1' },
+      { 'tailscale-funnel-request': '?1' },
+      // Ceux qu'un visiteur pourrait inventer.
       { 'x-forwarded-for': '100.64.0.1' },
       { 'x-real-ip': '127.0.0.1' },
-      { 'x-vitrine-public': '0' },
       { 'x-vitrine-owner': '1' },
     ]) {
-      assert.equal(from('93.184.216.34', headers), GUEST, JSON.stringify(headers));
+      assert.equal(
+        classify(arriving('93.184.216.34', headers)),
+        OWNER,
+        `${JSON.stringify(headers)} ne doit rien changer`,
+      );
     }
+
+    // Et l'inverse : un visiteur marqué le reste, quoi qu'il envoie.
+    const req = { headers: { 'x-vitrine-public': '0' }, socket: { remoteAddress: '100.64.0.1' } };
+    markPublicRequest(req);
+    assert.equal(classify(req), GUEST);
   });
 
   test('la liste blanche ne s’ouvre pas à un chemin qui lui ressemble', () => {

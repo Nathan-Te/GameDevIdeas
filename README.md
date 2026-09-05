@@ -158,7 +158,10 @@ Toutes les réponses sont en JSON, erreurs comprises (`{ error, message }`).
 
 Depuis le lot 7, **les routes ouvertes sans authentification sont une liste
 blanche** (`server/src/access.js`). Tout ce qui n'y figure pas répond **404** à un
-visiteur public — pas 403, qui révélerait l'existence de la route. Voir
+visiteur public — pas 403, qui révélerait l'existence de la route.
+
+Ce qui sépare Nathan d'un visiteur est **le port d'écoute par lequel la requête
+est entrée**, et rien d'autre : ni l'adresse source, ni un en-tête. Voir
 [`Docs/exposition-publique.md`](Docs/exposition-publique.md).
 
 `PATCH /api/ideas/:slug` accepte aussi `capsule_file_id` : la pièce désignée doit être une image de cette idée. Chaque idée porte `capsule_url`, l'adresse de cette image.
@@ -189,6 +192,7 @@ data/     base, fichiers utilisateur et archives, jamais commités
 - **Lot 6 — Peuplement** : les quatorze idées créées par l'API. Livré — [`Docs/lots/lot-06-peuplement.md`](Docs/lots/lot-06-peuplement.md).
 - **Lot 6b — Bascule sur point de montage** : la restauration remplace le contenu de `data/files`, jamais le dossier. Livré — [`Docs/lots/lot-06b-bascule-point-de-montage.md`](Docs/lots/lot-06b-bascule-point-de-montage.md).
 - **Lot 7 — Partage public et avis d'amis** : sélections partagées par lien, page invité `/p/:token/:slug`, avis et souhaits d'amis, liste blanche de routes, écran `/partages`. Livré — [`Docs/lots/lot-07-partage.md`](Docs/lots/lot-07-partage.md).
+- **Lot 7b — La porte se décide sur le port** : la classification par adresse source et l'en-tête Tailscale sont supprimés ; seul le port d'entrée compte. Livré — [`Docs/lots/lot-07b-porte-par-port.md`](Docs/lots/lot-07b-porte-par-port.md).
 
 Pas d'authentification, et il n'y en aura pas : l'accès de Nathan passe par le
 réseau Tailscale, et l'accès public — s'il est ouvert — par une liste blanche de

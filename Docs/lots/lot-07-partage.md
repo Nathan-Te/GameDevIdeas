@@ -40,6 +40,12 @@ un fait de transport que personne ne peut contrefaire.
 Sans `PUBLIC_PORT`, aucun point d'entrée public n'est ouvert : l'instance reste
 exactement ce qu'elle était après le lot 6b.
 
+> **Corrigé depuis, par le lot 7b.** Cette première version classait *aussi* par
+> adresse source et honorait l'en-tête `Tailscale-Funnel-Request`. Les deux ont
+> été retirés : en conteneur, toutes les requêtes arrivent par la passerelle du
+> réseau bridge, et l'application répondait 404 à Nathan sur son propre port.
+> Voir [`lot-07b-porte-par-port.md`](lot-07b-porte-par-port.md).
+
 ### Le modèle (migration `006-sharing.sql`)
 
 `shares`, `share_ideas`, `reviews`, `share_wishlists`. Le jeton fait 32 octets
@@ -216,7 +222,9 @@ précisément les lignes qu'on veut pouvoir relire.
 5. **Le comportement exact de Funnel n'a pas pu être vérifié depuis ce poste.**
    Le mécanisme choisi ne dépend pas de ce comportement, c'est tout son intérêt,
    mais la vérification depuis l'extérieur du tailnet reste à faire par Nathan :
-   c'est la checklist ci-dessous.
+   c'est la checklist ci-dessous. *(Le lot 7b a répondu à une partie de la
+   question : la classification par adresse a été retirée, et le port est
+   devenu le seul critère.)*
 
 6. **`share_position` sort de `shareIdeas` sans être utilisé par le front.**
    L'ordre est déjà celui du tableau. Le champ est conservé parce qu'il rendra
