@@ -31,7 +31,6 @@ COPY web/package.json ./web/
 RUN npm ci --ignore-scripts
 
 COPY server/ ./server/
-COPY shared/ ./shared/
 COPY web/ ./web/
 RUN npm run build --workspace web
 
@@ -50,6 +49,7 @@ ENV NODE_ENV=production \
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server/ ./server/
+COPY shared/ ./shared/
 COPY --from=build /app/web/dist ./web/dist
 
 # Les volumes sont montés sur ces chemins ; ils doivent appartenir à `node`.
