@@ -1,3 +1,4 @@
+import { Backup } from './pages/Backup';
 import { Catalogue } from './pages/Catalogue';
 import { Families } from './pages/Families';
 import { IdeaPage } from './pages/IdeaPage';
@@ -15,6 +16,7 @@ export function App() {
   if (pathname === '/' || pathname === '') return <Catalogue />;
   if (pathname === '/corbeille' || pathname === '/corbeille/') return <Trash />;
   if (pathname === '/familles' || pathname === '/familles/') return <Families />;
+  if (pathname === '/sauvegarde' || pathname === '/sauvegarde/') return <Backup />;
 
   const steam = /^\/idees\/([^/]+)\/steam\/?$/.exec(pathname);
   if (steam) return <SteamPage slug={decodeURIComponent(steam[1])} search={search} />;

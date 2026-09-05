@@ -35,6 +35,82 @@ npm run build # build du front dans web/dist
 npm run migrate
 ```
 
+## Sauvegarder et restaurer
+
+Une archive contient tout : la base et les fichiers utilisateur. C'est un
+`.tgz` ordinaire, lisible à la main (`tar tzf`), qui porte trois entrées —
+`manifest.json` (compteurs, version de schéma, un hachage SHA-256 par fichier),
+`vitrine.db` et `files/`.
+
+La base n'est **jamais** copiée fichier à fichier : elle est en WAL, et une
+copie à chaud donnerait une base tronquée. La lecture passe par `db.backup()`,
+l'API de sauvegarde en ligne de SQLite, qui produit une image cohérente pendant
+que les écritures continuent.
+
+Depuis le navigateur, tout est sur `/sauvegarde` : ce que contient l'archive,
+son téléchargement, le dépôt d'une archive à restaurer et la liste des archives
+du serveur. En ligne de commande :
+
+```bash
+npm run backup -- --out data/backups --keep 30
+npm run restore -- --file data/backups/vitrine-2026-09-05-0300.tgz
+npm run restore -- --file archive.tgz --merge --yes
+```
+
+`--merge` ajoute le contenu de l'archive au lieu de remplacer : les idées
+s'ajoutent (slug suffixé en cas de collision), les familles absentes sont
+créées, rien n'est jamais supprimé. C'est ce qui sert à réunir deux instances.
+
+Une restauration pose toujours une sauvegarde de sécurité dans `data/backups/`
+avant de basculer, et la remet en place toute seule si la bascule échoue. Une
+archive plus ancienne que le code est migrée avant d'être restaurée ; une
+archive plus récente est refusée en 409.
+
+`npm run restore` se lance **serveur arrêté** : un serveur en cours garde
+l'ancien fichier de base ouvert. `npm run backup` et `backup.sh` fonctionnent
+dans les deux cas.
+
+### Le cron
+
+`backup.sh` produit l'archive dans `data/backups/`, ne garde que les 30 plus
+récentes et écrit une ligne de log :
+
+```
+0 3 * * * /srv/vitrine/backup.sh >> /srv/vitrine/data/backups/backup.log 2>&1
+```
+
+En Docker, poser `VITRINE_CONTAINER=vitrine` dans l'environnement du cron : le
+script passe alors par `docker exec`.
+
+## Mise en production
+
+Sur le serveur Debian, l'application n'est exposée que sur le réseau Tailscale —
+il n'y a pas d'authentification, c'est le réseau qui fait la porte.
+
+```bash
+git clone <dépôt> /srv/vitrine && cd /srv/vitrine
+cp .env.example .env          # rien n'est obligatoire ; DEVELOPER_NAME au moins
+docker compose up -d --build
+```
+
+Publier le port sur la seule IP Tailscale plutôt que sur toutes les interfaces,
+en remplaçant la ligne `ports` du `docker-compose.yml` :
+
+```yaml
+ports:
+  - "100.x.y.z:3000:3000"     # l'IP Tailscale de la machine, `tailscale ip -4`
+```
+
+Mise à jour :
+
+```bash
+cd /srv/vitrine && git pull && docker compose up -d --build
+```
+
+Les migrations en attente sont appliquées au démarrage. `data/db`, `data/files`
+et `data/backups` sont des volumes : ils survivent aux reconstructions. La
+crontab de sauvegarde est celle donnée plus haut.
+
 Copier `.env.example` en `.env` pour ajuster le port, les chemins de données ou le sujet ntfy. Aucune variable n'est obligatoire.
 
 ## API
@@ -57,6 +133,11 @@ Toutes les réponses sont en JSON, erreurs comprises (`{ error, message }`).
 | `PATCH` | `/api/attachments/:id` | `label`, `position` (un rang, la liste est renumérotée), `link_type`. |
 | `DELETE` | `/api/attachments/:id` | Supprime la ligne puis le fichier. Libère la capsule si c'en était une. |
 | `GET` | `/files/*` | Fichiers utilisateur. Toute résolution hors de `data/files/` renvoie 404. |
+| `GET` | `/api/backup/preview` | Ce que contiendrait l'archive : compteurs, taille estimée. Ne produit rien. |
+| `POST` | `/api/backup` | Produit l'archive et la renvoie en flux. 409 si une sauvegarde ou une restauration est déjà en cours. |
+| `POST` | `/api/restore` | Multipart : l'archive, et un champ `mode` (`replace` par défaut, ou `merge`). |
+| `GET` | `/api/backups` | Les archives de `data/backups/`. |
+| `DELETE` | `/api/backups/:name` | En supprime une. |
 
 `PATCH /api/ideas/:slug` accepte aussi `capsule_file_id` : la pièce désignée doit être une image de cette idée. Chaque idée porte `capsule_url`, l'adresse de cette image.
 
@@ -71,13 +152,17 @@ server/   API Fastify + SQLite — migrations SQL numérotées, aucune étape de
 web/      Front React + Vite + TypeScript
 Docs/     seed-vitrine.md (source de vérité) et READMEs de lot
 scripts/  ntfy-notify.mjs — hooks Claude Code
-data/     base et fichiers utilisateur, jamais commités
+backup.sh Sauvegarde prête pour le cron
+data/     base, fichiers utilisateur et archives, jamais commités
 ```
 
 ## Avancement
 
 - **Lot 1 — Socle** : dépôt, Docker, migrations, API CRUD idées et verdicts, catalogue et page idée, tests API, hooks ntfy. Livré — [`Docs/lots/lot-01-socle.md`](Docs/lots/lot-01-socle.md).
 - **Lot 2 — Pièces jointes** : upload de fichiers et d'images, liens typés, rendu markdown, choix de la capsule, galerie, route de restauration. Livré — [`Docs/lots/lot-02-pieces-jointes.md`](Docs/lots/lot-02-pieces-jointes.md).
-- **Lot 3 — Vitrine** : la corbeille d'abord (l'interface manque encore à `restore`), puis la vue Steam, la passe de direction artistique et le responsive.
+- **Lot 3 — Vitrine** : corbeille et purge, vue Steam, passe de direction artistique et responsive. Livré — [`Docs/lots/lot-03-vitrine.md`](Docs/lots/lot-03-vitrine.md).
+- **Lot 3b — La vraie vitrine** : vue store refaite en réplique fidèle, liste de souhaits. Livré — [`Docs/lots/lot-03b-vitrine-fidele.md`](Docs/lots/lot-03b-vitrine-fidele.md).
+- **Lot 4 — Familles éditables et bande-annonce** : familles en base et écran `/familles`, bande-annonce jouable, `Range` sur `/files/*`. Livré — [`Docs/lots/lot-04-familles-bande-annonce.md`](Docs/lots/lot-04-familles-bande-annonce.md).
+- **Lot 5 — Sauvegarde et restauration** : archive `.tgz`, écran `/sauvegarde`, scripts et cron. Livré — [`Docs/lots/lot-05-sauvegarde.md`](Docs/lots/lot-05-sauvegarde.md).
 
 Pas d'authentification : l'accès passe par le réseau Tailscale.

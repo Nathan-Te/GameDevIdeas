@@ -18,6 +18,8 @@ Reprises telles quelles de la section 8 du seed :
 - Un fichier supprimé en base est supprimé sur disque dans la même opération ; jamais l'inverse.
 - Une purge supprime la base puis le dossier de l'idée ; jamais de purge partielle.
 - Le lookup de titre ne contacte jamais une adresse privée ou locale.
+- Toute lecture de la base pour sauvegarde passe par `db.backup()` ; jamais de copie du fichier vivant.
+- Une restauration produit toujours une sauvegarde de sécurité avant de basculer.
 - Tout HTML issu d'un contenu utilisateur (markdown, labels) passe par DOMPurify avant insertion.
 - L'API renvoie toujours du JSON, erreurs comprises (`{ error, message }`).
 - Pas de dépendance ajoutée sans la justifier dans le README du lot.
@@ -30,6 +32,9 @@ npm run dev                  # API Fastify (3000) + Vite (5173) en parallèle, p
 npm test                     # tests node:test de l'API
 npm run build                # build du front dans web/dist
 npm run migrate              # applique les migrations en attente sans démarrer le serveur
+npm run backup -- --out data/backups --keep 30   # archive .tgz (base + fichiers), sans passer par HTTP
+npm run restore -- --file <archive.tgz> [--merge] [--yes]   # restauration, serveur arrêté
+./backup.sh                  # la même archive, prête pour le cron (0 3 * * *)
 docker compose up --build    # l'application complète sur http://localhost:3000
 ```
 
@@ -49,6 +54,9 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `DATA_DB_DIR` | `./data/db` | Dossier du fichier SQLite. |
 | `DB_PATH` | — | Chemin complet de la base, prioritaire sur `DATA_DB_DIR`. `:memory:` pour les tests. |
 | `DATA_FILES_DIR` | `./data/files` | Dossier des fichiers utilisateur, servi par `/files/*`. |
+| `DATA_BACKUPS_DIR` | `./data/backups` | Dossier des archives locales. Créé au démarrage, exclu du contenu des archives. |
+| `BACKUP_KEEP` | `30` | Nombre d'archives gardées par `backup.sh`. |
+| `MAX_RESTORE_MB` | `4096` | Taille maximale d'une archive envoyée à `POST /api/restore`. |
 | `MAX_UPLOAD_MB` | `50` | Taille maximale d'un fichier envoyé. Au-delà : 413, et rien n'est écrit. |
 | `MAX_TRAILER_MB` | `100` | Limite propre aux bandes-annonces (`.gif`, `.mp4`, `.webm`). Une vidéo pèse plus qu'une capture. |
 | `LINK_TITLE_LOOKUP` | activé | Aller chercher le titre de la page pour libeller un lien collé sans label. Coupé, le libellé retombe sur le nom de domaine. |
@@ -75,10 +83,17 @@ Toutes facultatives ; `.env.example` les documente une par une avec leur valeur 
 | `GET`, `POST /api/ideas/:slug/attachments` | Liste ; ajout par multipart (fichiers) ou JSON `{ url, label? }` (lien). |
 | `PUT /api/ideas/:slug/attachments/order` | Réordonne, `{ ids: [...] }` complet, en une transaction. |
 | `PATCH`, `DELETE /api/attachments/:id` | `label` / `position` / `link_type` ; suppression ligne + fichier. |
+| `GET /api/backup/preview` | Ce que contiendrait l'archive — compteurs, taille estimée — sans rien produire. |
+| `POST /api/backup` | Produit l'archive dans un temporaire et la renvoie en flux (`Content-Disposition: attachment`), temporaire effacé à la fermeture du flux. 409 si une opération est déjà en cours. |
+| `POST /api/restore` | Multipart : l'archive, plus un champ `mode` (`replace` par défaut, ou `merge`). Vérifie, migre l'archive, sauvegarde de sécurité, bascule, vérifie — et remet l'état précédent si la bascule échoue. |
+| `GET /api/backups` | Les archives de `data/backups/` : nom, date, taille. |
+| `DELETE /api/backups/:name` | En supprime une. Nom validé contre la traversée de chemin, comme `/files/`. |
 | `GET /files/*` | Fichiers utilisateur, garde stricte contre la traversée de chemin, cache long. Les médias jouables (`.gif`, `.mp4`, `.webm`, `.mp3`, `.ogg`) sont servis `inline` avec `Accept-Ranges: bytes` et honorent les requêtes `Range` (206, 416 hors bornes) — sans quoi une vidéo ne se lit pas dans le navigateur. |
 | Tout le reste | `index.html` si le front est construit, sinon 404 JSON. Jamais sous `/api` ni `/files`. |
 
-Côté front, cinq vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam`, `/corbeille` et `/familles`.
+Côté front, six vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/idees/:slug/steam`, `/corbeille`, `/familles` et `/sauvegarde`.
+
+`/sauvegarde` tient en trois blocs : ce que contient l'archive et son téléchargement, le dépôt d'une archive à restaurer (`Remplacer` / `Fusionner`, avec une confirmation qui compte les idées et les fichiers de part et d'autre), et la liste des archives du serveur. Les chiffres de l'archive déposée sont lus **dans le navigateur** : `manifest.json` est la première entrée du `.tgz`, `DecompressionStream` fait le reste (`web/src/archive.ts`).
 
 `/familles` édite la liste des familles : libellé, étiquettes store en pilules, fonctionnalités en cases, ordre à la poignée. Le sélecteur de famille de la page idée et le filtre du catalogue lisent cette liste, jamais une énumération du code.
 
@@ -91,6 +106,7 @@ Côté front, cinq vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/i
 - **Lot 3 — Vitrine** : livré. Corbeille et purge, vue Steam, feuille de tokens, passe de DA et responsive.
 - **Lot 3b — La vraie vitrine** : livré. Vue store refaite en réplique fidèle, liste de souhaits (migration `003`, `ideas.wishlisted_at`), filtre et marqueur au catalogue, `DEVELOPER_NAME`. **La v1 est close.**
 - **Lot 4 — Familles éditables et bande-annonce** : livré. Table `families` et écran `/familles` (migration `004`), `kind` `trailer` et `ideas.trailer_file_id` (migration `005`), `Range` sur `/files/*`, lecteur en tête de visionneuse et aperçu au survol du catalogue.
+- **Lot 5 — Sauvegarde et restauration** : livré. Archive `.tgz` (manifeste haché, base par `db.backup()`, fichiers), routes `/api/backup`, `/api/restore`, `/api/backups`, écran `/sauvegarde`, `npm run backup` / `npm run restore` et `backup.sh` pour le cron. **La v1 est close et prête à héberger** — la mise en production est dans le README.
 
 ## Modèle de données
 
@@ -133,7 +149,10 @@ server/           API Fastify + SQLite (JavaScript ESM, pas de build)
   migrations/     Migrations SQL numérotées
   src/            config, db, migrate, routes, validation, dépôts SQL,
                   files.js (disque, garde de chemin, `Range`), links.js (liens typés),
-                  families-repo.js (les familles, seed compris)
+                  families-repo.js (les familles, seed compris),
+                  backup.js (archive, restauration, fusion, verrou),
+                  db-handle.js (la poignée qui permet de rebrancher la base),
+                  backup-cli.js / restore-cli.js (les mêmes, en ligne de commande)
   test/           node:test, une base en mémoire par test
 web/              Front React + Vite + TypeScript
   src/            api (client typé), router, filters (filtres d'URL partagés),
@@ -142,7 +161,12 @@ web/              Front React + Vite + TypeScript
                   steam.css (la palette du photomontage, hors tokens)
 Docs/             seed-vitrine.md (source de vérité) et lots/
 scripts/          ntfy-notify.mjs (hooks Claude Code)
-data/             base SQLite et fichiers utilisateur — jamais commité
+data/             base SQLite, fichiers utilisateur et archives — jamais commité
+  db/             vitrine.db (+ -wal, -shm)
+  files/          les fichiers utilisateur, servis par /files/*
+  backups/        les archives .tgz : cron, sauvegardes de sécurité.
+                  Créé au démarrage, et toujours exclu du contenu d'une archive
+                  — une sauvegarde ne contient jamais les sauvegardes.
 ```
 
 ## Conventions de code

@@ -189,3 +189,16 @@ export const patchFamilyBody = {
     position: { type: 'integer', minimum: 0, maximum: 10000 },
   },
 };
+
+/**
+ * Nom d'une archive locale. Le motif refuse déjà tout séparateur et impose
+ * l'extension ; `safeBackupName` le revérifie côté disque — la traversée de
+ * chemin ne se garde pas à un seul endroit.
+ */
+export const backupNameParams = {
+  type: 'object',
+  required: ['name'],
+  properties: {
+    name: { type: 'string', minLength: 5, maxLength: 200, pattern: '^[^/\\\\]+\\.tgz$' },
+  },
+};

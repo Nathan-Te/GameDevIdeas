@@ -26,6 +26,24 @@ export const config = {
   filesDir: fromRoot(env.DATA_FILES_DIR || './data/files'),
 
   /**
+   * Les archives produites sur le serveur (sauvegardes manuelles, cron,
+   * sauvegardes de sécurité posées avant une restauration). Ce dossier est
+   * créé au démarrage et **exclu des archives** : une sauvegarde ne contient
+   * jamais les sauvegardes, sinon chacune pèse la somme des précédentes.
+   */
+  backupsDir: fromRoot(env.DATA_BACKUPS_DIR || './data/backups'),
+
+  /**
+   * Taille maximale d'une archive envoyée à `POST /api/restore`, en mégaoctets.
+   * Large par défaut : une archive contient toutes les bandes-annonces, elle
+   * n'a rien à voir avec un envoi de pièce jointe.
+   */
+  maxRestoreMb: Number(env.MAX_RESTORE_MB || 4096),
+
+  /** Nombre d'archives gardées par `backup.sh` (les plus récentes). */
+  backupKeep: Number(env.BACKUP_KEEP || 30),
+
+  /**
    * Taille maximale d'un fichier envoyé, en mégaoctets. Au-delà, la requête est
    * refusée en 413 et le fichier partiellement écrit est effacé.
    */

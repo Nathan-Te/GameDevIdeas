@@ -11,6 +11,7 @@ import {
   steamHref,
 } from '../filters';
 import { useFamilies } from '../families';
+import { takeFlash } from '../flash';
 import { Link, navigate } from '../router';
 import { SORT_LABELS, STATUS_LABELS, STATUSES } from '../types';
 import type { Idea, IdeaFilters, Sort, Status } from '../types';
@@ -28,6 +29,9 @@ export function Catalogue() {
   const [trashed, setTrashed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Le message laissé par une restauration réussie : elle finit ici, mais
+  // l'écran qui l'a produite n'existe plus (voir `flash.ts`).
+  const [flash] = useState(() => takeFlash());
   const { families } = useFamilies();
 
   const load = useCallback(async (active: IdeaFilters) => {
@@ -102,6 +106,9 @@ export function Catalogue() {
             Corbeille
             {trashed > 0 && <span className="button__count">{trashed}</span>}
           </Link>
+          <Link to="/sauvegarde" className="button button--ghost">
+            Sauvegarde
+          </Link>
           <button
             type="button"
             className="button button--accent"
@@ -112,6 +119,8 @@ export function Catalogue() {
           </button>
         </div>
       </header>
+
+      {flash && <p className="notice">{flash}</p>}
 
       <section className="filters" aria-label="Filtres du catalogue">
         <label className="filters__field">

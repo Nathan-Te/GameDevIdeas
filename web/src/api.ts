@@ -1,12 +1,16 @@
 import type {
   Attachment,
   AttachmentPatch,
+  BackupPreview,
   Family,
   FamilyPatch,
   Idea,
   IdeaFilters,
   IdeaPatch,
   PurgeResult,
+  RestoreMode,
+  RestoreResult,
+  ServerBackup,
   Verdict,
 } from './types';
 
@@ -59,6 +63,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return body as T;
+}
+
+/** Le nom que le serveur donne à l'archive, repris tel quel pour l'enregistrer. */
+function filenameFromDisposition(xhr: XMLHttpRequest): string {
+  const header = xhr.getResponseHeader('content-disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(header);
+  return match?.[1] ?? xhr.getResponseHeader('x-vitrine-backup-name') ?? 'vitrine.tgz';
 }
 
 function query(filters: IdeaFilters): string {
@@ -256,6 +267,115 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ ids }) },
     );
     return attachments;
+  },
+
+  // --- Sauvegarde -----------------------------------------------------------
+
+  /** Ce que contiendrait l'archive, sans rien produire. */
+  backupPreview(): Promise<BackupPreview> {
+    return request<BackupPreview>('/api/backup/preview');
+  },
+
+  /**
+   * Télécharge l'archive. XHR et non `fetch`, pour la même raison que l'envoi
+   * de fichiers : la progression n'est pas observable autrement. Le serveur
+   * annonce `Content-Length`, donc la barre est juste et non estimée.
+   */
+  downloadBackup(
+    onProgress?: (ratio: number) => void,
+    signal?: AbortSignal,
+  ): Promise<{ blob: Blob; filename: string }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/backup');
+      xhr.responseType = 'blob';
+
+      xhr.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      });
+
+      xhr.addEventListener('load', () => {
+        const blob = xhr.response as Blob;
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(1);
+          resolve({ blob, filename: filenameFromDisposition(xhr) });
+          return;
+        }
+
+        // Une erreur arrive en JSON, mais dans un Blob : il faut le lire.
+        void blob
+          .text()
+          .then((text) => {
+            const { error, message } = JSON.parse(text) as { error?: string; message?: string };
+            reject(new ApiError(xhr.status, error ?? 'error', message ?? `Erreur ${xhr.status}.`));
+          })
+          .catch(() => reject(new ApiError(xhr.status, 'error', `Erreur ${xhr.status}.`)));
+      });
+
+      xhr.addEventListener('error', () =>
+        reject(new ApiError(0, 'network_error', 'Serveur injoignable.')),
+      );
+      xhr.addEventListener('abort', () =>
+        reject(new ApiError(0, 'aborted', 'Téléchargement interrompu.')),
+      );
+
+      signal?.addEventListener('abort', () => xhr.abort());
+      xhr.send();
+    });
+  },
+
+  /** Envoie une archive et la restaure. `mode` est un champ du formulaire. */
+  restoreBackup(
+    file: File,
+    mode: RestoreMode,
+    onProgress?: (ratio: number) => void,
+  ): Promise<RestoreResult> {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('mode', mode);
+      form.append('archive', file, file.name);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/restore');
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      });
+
+      xhr.addEventListener('load', () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText) as unknown;
+        } catch {
+          body = null;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(1);
+          resolve(body as RestoreResult);
+          return;
+        }
+
+        const { error, message } = (body ?? {}) as { error?: string; message?: string };
+        reject(new ApiError(xhr.status, error ?? 'error', message ?? `Erreur ${xhr.status}.`));
+      });
+
+      xhr.addEventListener('error', () =>
+        reject(new ApiError(0, 'network_error', 'Serveur injoignable.')),
+      );
+
+      xhr.send(form);
+    });
+  },
+
+  async listBackups(): Promise<ServerBackup[]> {
+    const { backups } = await request<{ backups: ServerBackup[] }>('/api/backups');
+    return backups;
+  },
+
+  deleteBackup(name: string): Promise<ServerBackup> {
+    return request<ServerBackup>(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
   },
 
   /** Contenu texte d'un markdown attaché, lu depuis `/files/`. */

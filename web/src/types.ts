@@ -193,3 +193,53 @@ export interface PurgeResult {
   /** La base est propre mais le dossier de fichiers est resté sur le disque. */
   orphan_directory: boolean;
 }
+
+// --- Sauvegarde --------------------------------------------------------------
+
+/** Ce que `GET /api/backup/preview` annonce, et ce que porte un manifeste. */
+export interface BackupCounts {
+  ideas: number;
+  verdicts: number;
+  attachments: number;
+  families: number;
+}
+
+export interface BackupPreview {
+  format: number;
+  schema_version: string | null;
+  counts: BackupCounts;
+  files: { count: number; total_bytes: number };
+  database_bytes: number;
+  /** Avant compression : le `.tgz` pèsera moins. */
+  estimated_bytes: number;
+}
+
+/** Le manifeste d'une archive, tel qu'il est lu dans le `.tgz`. */
+export interface BackupManifest {
+  format: number;
+  created_at: string;
+  schema_version: string | null;
+  counts: BackupCounts;
+  files: { count: number; total_bytes: number };
+  hashes: Record<string, string>;
+}
+
+/** Une archive posée sur le serveur, dans `data/backups/`. */
+export interface ServerBackup {
+  name: string;
+  bytes: number;
+  created_at: string;
+}
+
+export type RestoreMode = 'replace' | 'merge';
+
+export interface RestoreResult {
+  mode: RestoreMode;
+  manifest: BackupManifest;
+  migrations_applied: string[];
+  schema_version: string | null;
+  safety_backup: string;
+  before: { ideas: number; files: number };
+  after: { ideas: number; files: number };
+  merged: (BackupCounts & { renamed: { from: string; to: string }[] }) | null;
+}

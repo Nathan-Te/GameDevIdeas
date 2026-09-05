@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import Fastify from 'fastify';
 
 import { config } from './config.js';
+import { createDbHandle } from './db-handle.js';
 import { openDatabase } from './db.js';
 import { registerErrorHandling } from './errors.js';
 import attachmentRoutes from './routes/attachments.js';
+import backupRoutes from './routes/backup.js';
 import configRoutes from './routes/config.js';
 import familyRoutes from './routes/families.js';
 import fileRoutes from './routes/files.js';
@@ -26,7 +28,12 @@ export async function buildApp({ db, dbPath, logger = false } = {}) {
   const database = db ?? openDatabase({ path: dbPath, logger: app.log });
   const ownsDatabase = !db;
 
-  app.decorate('db', database);
+  /**
+   * `app.db` est une poignée, pas la connexion : la restauration remplace le
+   * fichier de base et rebranche la poignée sans que les routes aient à savoir
+   * qu'elles ne parlent plus au même objet (voir `db-handle.js`).
+   */
+  app.decorate('db', database.isDbHandle ? database : createDbHandle(database));
   registerErrorHandling(app);
 
   await app.register(configRoutes);
@@ -36,11 +43,16 @@ export async function buildApp({ db, dbPath, logger = false } = {}) {
   // `/files/*` sert les fichiers utilisateur ; il est déclaré avant le repli
   // SPA pour qu'un fichier absent renvoie un 404 JSON et non `index.html`.
   await app.register(fileRoutes);
+  // Sauvegarde et restauration : déclarées après les autres, elles n'ajoutent
+  // aucune route sous un préfixe déjà servi.
+  await app.register(backupRoutes);
 
   await registerStatic(app);
 
   app.addHook('onClose', async () => {
-    if (ownsDatabase) database.close();
+    // La poignée peut désormais pointer une autre connexion que `database` :
+    // c'est celle-là qu'il faut fermer.
+    if (ownsDatabase) app.db.close();
   });
 
   return app;

@@ -13,12 +13,16 @@ services:
       # La base et les fichiers utilisateur survivent à toute reconstruction.
       - ./data/db:/app/data/db
       - ./data/files:/app/data/files
+      # Les archives aussi : une sauvegarde qui vit dans le conteneur disparaît
+      # à la première reconstruction, c'est-à-dire au pire moment.
+      - ./data/backups:/app/data/backups
     environment:
       NODE_ENV: production
       PORT: "3000"
       HOST: 0.0.0.0
       DATA_DB_DIR: /app/data/db
       DATA_FILES_DIR: /app/data/files
+      DATA_BACKUPS_DIR: /app/data/backups
       SERVE_STATIC: "true"
       LOG_LEVEL: info
     healthcheck:

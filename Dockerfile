@@ -42,6 +42,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     DATA_DB_DIR=/app/data/db \
     DATA_FILES_DIR=/app/data/files \
+    DATA_BACKUPS_DIR=/app/data/backups \
     SERVE_STATIC=true
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -50,7 +51,7 @@ COPY server/ ./server/
 COPY --from=build /app/web/dist ./web/dist
 
 # Les volumes sont montés sur ces chemins ; ils doivent appartenir à `node`.
-RUN mkdir -p /app/data/db /app/data/files && chown -R node:node /app/data
+RUN mkdir -p /app/data/db /app/data/files /app/data/backups && chown -R node:node /app/data
 USER node
 
 EXPOSE 3000

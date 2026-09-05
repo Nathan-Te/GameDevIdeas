@@ -1756,3 +1756,103 @@ a {
     margin-left: 0;
   }
 }
+
+/* --- Sauvegarde ----------------------------------------------------------- */
+/* L'écran /sauvegarde. Trois panneaux empilés : sauvegarder, restaurer, les
+   archives du serveur. Rien de neuf visuellement — il réemploie la zone de
+   dépôt et la barre de progression des pièces jointes. */
+
+.backup {
+  margin-bottom: var(--gap);
+}
+
+.backup__summary {
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-ui);
+}
+
+.backup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+}
+
+.backup__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.backup__mode {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex: 1 1 240px;
+  padding: var(--space-3);
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.backup__mode:has(input:checked) {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.backup__mode > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.backup__mode .hint {
+  margin: 0;
+}
+
+.backup__list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.backup__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.backup__name {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--text);
+  word-break: break-all;
+}
+
+.backup__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  .backup__item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+}
