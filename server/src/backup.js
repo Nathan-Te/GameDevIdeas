@@ -39,6 +39,26 @@ const MANIFEST = 'manifest.json';
 const DB_ENTRY = 'vitrine.db';
 const FILES_ENTRY = 'files';
 
+/**
+ * Les deux dossiers de travail de la bascule, **à l'intérieur** de `data/files`.
+ *
+ * Ils y sont pour deux raisons, apprises en production :
+ *
+ * 1. En conteneur, `data/files` est un point de montage. On ne peut ni le
+ *    supprimer ni renommer par-dessus : le noyau répond `EBUSY`. La bascule
+ *    remplace donc le **contenu** du dossier, jamais le dossier.
+ * 2. `rename()` refuse de traverser une frontière de montage (`EXDEV`), même
+ *    quand les deux côtés sont sur le même disque. Un dossier de préparation
+ *    posé à côté (`data/files.incoming`, comme au lot 5) est de l'autre côté de
+ *    la frontière : ses fichiers ne pourraient pas être renommés à l'intérieur.
+ *    Rangés dedans, ils le peuvent.
+ *
+ * Ces deux noms sont réservés : `walkFiles` les ignore, donc ils n'entrent
+ * jamais dans une archive ni dans un compteur de fichiers.
+ */
+export const STAGING_DIR = '.incoming';
+export const TRASH_DIR = '.outgoing';
+
 // --- Verrou ------------------------------------------------------------------
 
 /**
@@ -107,6 +127,10 @@ export async function walkFiles(root, { skip = [] } = {}) {
     for (const entry of entries) {
       const child = join(absolute, entry.name);
       if (skipped.some((s) => child === s || child.startsWith(s + sep))) continue;
+      // Les dossiers de bascule ne sont pas du contenu : ni dans une archive,
+      // ni dans un compteur. Au premier niveau seulement — plus bas, ce serait
+      // un fichier utilisateur qui se trouve porter ce nom.
+      if (!relative && (entry.name === STAGING_DIR || entry.name === TRASH_DIR)) continue;
 
       const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory()) await visit(child, childRelative);
@@ -439,27 +463,109 @@ async function removeDatabaseFiles(dbPath) {
 }
 
 /**
- * Remplace l'état courant par celui d'un dossier extrait. La base et les
- * fichiers sont d'abord posés à côté de leur destination — même volume, donc
- * `rename` est atomique — puis échangés.
+ * Remplace l'état courant par celui d'un dossier extrait.
+ *
+ * Le principe tient en une phrase : **on remplace le contenu, jamais le
+ * contenant**. `data/files` et `data/db` sont des points de montage en
+ * production ; les renommer ou les supprimer répond `EBUSY`, et c'est ce qui
+ * faisait échouer toute restauration en conteneur.
+ *
+ * Ce qui reste atomique, et ce qui ne l'est pas :
+ *
+ * - **La base bascule par `rename`**, donc atomiquement. C'est le fichier
+ *   `vitrine.db` qui est renommé, pas le dossier qui le contient : tant que le
+ *   montage porte sur `data/db` et non sur le fichier lui-même, l'opération est
+ *   permise. Le cas contraire est détecté et nommé, plutôt que de sortir en
+ *   `EBUSY` nu.
+ * - **Le dossier des fichiers ne peut pas basculer d'un seul geste** : son
+ *   identité doit survivre, donc son contenu se déplace entrée par entrée. La
+ *   fenêtre est celle entre les deux boucles, et chaque `rename` est lui-même
+ *   atomique — l'ancien contenu est mis de côté avant que le nouveau n'arrive,
+ *   jamais l'inverse, pour qu'une interruption laisse un dossier incomplet et
+ *   non un mélange des deux états. La marche arrière repasse par ici, avec la
+ *   sauvegarde de sécurité.
  */
 async function applyReplace({ dir, dbPath, filesDir }) {
   const stagedDb = `${dbPath}.incoming`;
-  const stagedFiles = `${resolve(filesDir)}.incoming`;
+  const files = resolve(filesDir);
+  const staging = join(files, STAGING_DIR);
+  const trash = join(files, TRASH_DIR);
 
+  await mkdir(files, { recursive: true });
   await removeQuietly(stagedDb);
-  await removeQuietly(stagedFiles);
+  await removeQuietly(staging);
+  await removeQuietly(trash);
 
+  // 1. Tout est préparé du bon côté de la frontière de montage : le nouveau
+  //    fichier de base dans le dossier de la base, les nouveaux fichiers dans
+  //    le dossier des fichiers. Aucun `rename` de la bascule ne la traversera.
   await copyFile(join(dir, DB_ENTRY), stagedDb);
-  await copyTree(join(dir, FILES_ENTRY), stagedFiles);
-  await mkdir(stagedFiles, { recursive: true }); // archive sans aucun fichier
+  await mkdir(staging, { recursive: true }); // archive sans aucun fichier
+  await copyTree(join(dir, FILES_ENTRY), staging);
 
-  await removeDatabaseFiles(dbPath);
-  await mkdir(dirname(dbPath), { recursive: true });
-  await rename(stagedDb, dbPath);
+  // 2. La base, en une opération.
+  try {
+    await removeDatabaseFiles(dbPath);
+    await mkdir(dirname(dbPath), { recursive: true });
+    await rename(stagedDb, dbPath);
+  } catch (err) {
+    if (err?.code === 'EBUSY' || err?.code === 'EXDEV') {
+      throw new Error(
+        `le fichier de base ${dbPath} ne peut pas être remplacé (${err.code}) : il est ` +
+          'lui-même un point de montage. Monter le dossier qui le contient, pas le fichier.',
+        { cause: err },
+      );
+    }
+    throw err;
+  }
 
-  await removeQuietly(filesDir);
-  await rename(stagedFiles, filesDir);
+  // 3. Les fichiers, entrée par entrée. L'ancien contenu part d'abord de côté,
+  //    le nouveau prend sa place ensuite.
+  await mkdir(trash, { recursive: true });
+  for (const name of await readdir(files)) {
+    if (name === STAGING_DIR || name === TRASH_DIR) continue;
+    await rename(join(files, name), join(trash, name));
+  }
+  for (const name of await readdir(staging)) {
+    await rename(join(staging, name), join(files, name));
+  }
+
+  await removeQuietly(trash);
+  await removeQuietly(staging);
+}
+
+/**
+ * Efface ce qu'une restauration interrompue a pu laisser derrière elle. Appelée
+ * au démarrage du serveur : sans ça, un `.incoming` orphelin resterait à
+ * occuper le disque, et — pire — la version d'avant ce correctif en laissait un
+ * à côté de `data/files` sans que rien ne le nettoie jamais.
+ *
+ * Toujours sûr : ces dossiers ne contiennent que du contenu **préparé**, jamais
+ * appliqué. Le contenu vivant, lui, n'a pas bougé — la bascule s'était arrêtée
+ * avant, et `rename` ne laisse pas d'état intermédiaire.
+ */
+export async function cleanupRestoreStaging({
+  dbPath = config.dbPath,
+  filesDir = config.filesDir,
+} = {}) {
+  const files = resolve(filesDir);
+  const leftovers = [
+    `${dbPath}.incoming`,
+    join(files, STAGING_DIR),
+    join(files, TRASH_DIR),
+    // Lot 5 : le dossier de préparation était posé à côté de sa destination.
+    // Une instance en production en a un par restauration échouée.
+    `${files}.incoming`,
+  ];
+
+  const removed = [];
+  for (const path of leftovers) {
+    const exists = await stat(path).then(() => true, () => false);
+    if (!exists) continue;
+    await removeQuietly(path);
+    removed.push(path);
+  }
+  return removed;
 }
 
 /** `PRAGMA integrity_check` et `foreign_key_check`, les deux ou rien. */
@@ -684,7 +790,27 @@ export async function restoreArchive({
       // 6. Vérification.
       verifyDatabase(db);
     } catch (err) {
-      await rollback({ safety: safety.path, db, dbPath, filesDir, logger });
+      // La marche arrière peut échouer à son tour — c'est ce qui arrivait sur un
+      // point de montage, et l'erreur d'origine était alors perdue au profit de
+      // la sienne. Les deux sont nommées, et le message dit quoi faire.
+      let rollbackError = null;
+      try {
+        await rollback({ safety: safety.path, db, dbPath, filesDir, logger });
+      } catch (failed) {
+        rollbackError = failed;
+        logger?.error?.(`marche arrière impossible : ${failed.message}`);
+      }
+
+      if (rollbackError) {
+        throw new HttpError(
+          500,
+          'restore_rollback_failed',
+          `Restauration interrompue (${err.message}), et la remise en état a échoué à son tour ` +
+            `(${rollbackError.message}). L'instance est dans un état incertain : restaurer ` +
+            `${safety.name} à la main, serveur arrêté, avec « npm run restore -- --file ».`,
+        );
+      }
+
       throw new HttpError(
         err instanceof HttpError ? err.statusCode : 500,
         err instanceof HttpError ? err.error : 'restore_failed',

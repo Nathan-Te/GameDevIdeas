@@ -24,12 +24,36 @@ Reprises telles quelles de la section 8 du seed :
 - L'API renvoie toujours du JSON, erreurs comprises (`{ error, message }`).
 - Pas de dépendance ajoutée sans la justifier dans le README du lot.
 
+### Règle ajoutée en cours de route (hors seed)
+
+**Une livraison qui touche au système de fichiers doit être exercée dans le conteneur, pas seulement en test unitaire.**
+
+Le poste de développement ment sur trois points au moins : `data/` y est un
+dossier ordinaire alors qu'en production ce sont des points de montage, le front
+y est servi par Vite et non par Fastify, et tout le dépôt y est présent alors que
+l'image ne contient que ce que le `Dockerfile` copie. Un test qui tourne dans un
+dossier temporaire ne voit rien de tout ça.
+
+C'est le quatrième défaut de cette famille, tous invisibles en local et tous
+cassants en production :
+
+1. le proxy Vite — une route servie par Fastify et absente du proxy renvoie du HTML en 200 ;
+2. `shared/` absent du `Dockerfile`, aux deux étages ;
+3. la réouverture de connexion à la base ;
+4. la bascule de restauration sur un point de montage (`EBUSY`, lot 6b).
+
+En pratique : `npm run test:container`, et un fichier de test qui **refuse de
+passer** quand la destination n'est pas réellement montée
+(`VITRINE_REQUIRE_MOUNT_TEST=1`) — un test qui se saute en silence sur le poste
+de développement puis en intégration ne prouve rien.
+
 ## Commandes
 
 ```bash
 npm install                  # une seule fois, à la racine (workspaces npm)
 npm run dev                  # API Fastify (3000) + Vite (5173) en parallèle, proxy /api et /files
 npm test                     # tests node:test de l'API
+npm run test:container       # les tests qui exigent de vrais points de montage (Docker requis)
 npm run build                # build du front dans web/dist
 npm run migrate              # applique les migrations en attente sans démarrer le serveur
 npm run backup -- --out data/backups --keep 30   # archive .tgz (base + fichiers), sans passer par HTTP
@@ -107,6 +131,8 @@ Côté front, six vues : `/` (catalogue), `/idees/:slug` (fiche éditable), `/id
 - **Lot 3b — La vraie vitrine** : livré. Vue store refaite en réplique fidèle, liste de souhaits (migration `003`, `ideas.wishlisted_at`), filtre et marqueur au catalogue, `DEVELOPER_NAME`. **La v1 est close.**
 - **Lot 4 — Familles éditables et bande-annonce** : livré. Table `families` et écran `/familles` (migration `004`), `kind` `trailer` et `ideas.trailer_file_id` (migration `005`), `Range` sur `/files/*`, lecteur en tête de visionneuse et aperçu au survol du catalogue.
 - **Lot 5 — Sauvegarde et restauration** : livré. Archive `.tgz` (manifeste haché, base par `db.backup()`, fichiers), routes `/api/backup`, `/api/restore`, `/api/backups`, écran `/sauvegarde`, `npm run backup` / `npm run restore` et `backup.sh` pour le cron. **La v1 est close et prête à héberger** — la mise en production est dans le README.
+- **Lot 6 — Peuplement** : livré. Les quatorze idées de `Docs/fiches-vitrine-14.md`, créées par l'API avec `scripts/seed-ideas.mjs` (idempotent, repérage par titre), et l'archive à transporter sur le serveur.
+- **Lot 6b — Bascule sur point de montage** : livré. La restauration remplace le *contenu* de `data/files`, jamais le dossier — un point de montage ne se renomme pas (`EBUSY`) et `rename` n'en traverse pas la frontière (`EXDEV`). Nettoyage des `.incoming` orphelins au démarrage, et `npm run test:container` pour l'exercer là où c'est vrai.
 
 ## Modèle de données
 

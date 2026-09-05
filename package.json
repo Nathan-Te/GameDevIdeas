@@ -20,7 +20,8 @@
     "backup": "npm run backup --workspace server --",
     "restore": "npm run restore --workspace server --",
     "start": "npm run start --workspace server",
-    "test": "npm test --workspace server"
+    "test": "npm test --workspace server",
+    "test:container": "bash scripts/test-container.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
