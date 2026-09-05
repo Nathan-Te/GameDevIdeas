@@ -30,6 +30,7 @@ COPY web/package.json ./web/
 
 RUN npm ci --ignore-scripts
 
+COPY server/ ./server/
 COPY shared/ ./shared/
 COPY web/ ./web/
 RUN npm run build --workspace web
