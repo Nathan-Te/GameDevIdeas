@@ -43,8 +43,8 @@ const THUMB_STEP = 120;
 
 /**
  * Une place dans la visionneuse. Un magasin y met ses vidéos d'abord, ses
- * captures ensuite ; une idée sans aucune vidéo garde la carte de texte du lot
- * 3b à la place de la première.
+ * captures ensuite ; une idée sans aucune vidéo ouvre sur l'image désignée en
+ * tête, et faute d'image sur la carte de texte du lot 3b.
  *
  * Les captures portent leur rang **dans les captures** et non dans la
  * visionneuse : c'est ce rang que la loupe passe au `Lightbox`, qui ne connaît
@@ -84,39 +84,68 @@ export function StoreMock({
   const [stripOffset, setStripOffset] = useState(0);
   const [viewing, setViewing] = useState<number | null>(null);
 
-  // Les captures sont les images attachées, la capsule mise à part : elle est
-  // déjà en tête de la colonne de droite, la revoir en vignette ne dit rien.
-  const shots = useMemo(
-    () =>
-      attachments.filter(
-        (item) => item.kind === 'image' && item.file_url && item.id !== idea.capsule_file_id,
-      ),
-    [attachments, idea.capsule_file_id],
+  /**
+   * La pièce **en tête**, telle que le serveur l'a désignée : une bande-annonce,
+   * ou une image quand l'idée n'a pas de vidéo. On ne rejoue pas la règle ici.
+   */
+  const leading = useMemo(
+    () => attachments.find((item) => item.id === idea.leading_media_id && item.file_url) ?? null,
+    [attachments, idea.leading_media_id],
   );
 
+  /** L'image en tête, quand la tête est une image — la capsule y a droit. */
+  const leadingShot = leading && leading.kind === 'image' ? leading : null;
+
   /**
-   * Les bandes-annonces, celle en tête d'abord. Le serveur dit laquelle mène
-   * (`leading_trailer_id` : la désignée, ou la première à défaut) — on ne
-   * recalcule pas la règle ici, elle vivrait alors à deux endroits.
+   * Les captures sont les images attachées, la capsule mise à part : elle est
+   * déjà en tête de la colonne de droite, la revoir en vignette ne dit rien.
+   *
+   * Une exception, et c'est tout l'objet de l'encart central : la capsule
+   * **désignée en tête** entre bel et bien dans la visionneuse, en première
+   * place. Une image peut donc tenir les deux positions à la fois.
+   */
+  const shots = useMemo(() => {
+    const rest = attachments.filter(
+      (item) =>
+        item.kind === 'image' &&
+        item.file_url &&
+        item.id !== idea.capsule_file_id &&
+        item.id !== leadingShot?.id,
+    );
+    return leadingShot ? [leadingShot, ...rest] : rest;
+  }, [attachments, idea.capsule_file_id, leadingShot]);
+
+  /**
+   * Les bandes-annonces, celle en tête d'abord quand la tête en est une.
    */
   const trailers = useMemo(() => {
     const all = attachments.filter((item) => item.kind === 'trailer' && item.file_url);
-    const leading = all.find((item) => item.id === idea.leading_trailer_id);
-    return leading ? [leading, ...all.filter((item) => item !== leading)] : all;
-  }, [attachments, idea.leading_trailer_id]);
+    const first = all.find((item) => item.id === leading?.id);
+    return first ? [first, ...all.filter((item) => item !== first)] : all;
+  }, [attachments, leading]);
 
-  /** Vidéos puis captures, comme sur un magasin. */
+  /**
+   * Vidéos puis captures, comme sur un magasin — sauf quand une image tient
+   * l'encart central : elle passe alors devant tout le reste, et la carte de
+   * texte du lot 3b n'a plus de raison d'être puisqu'il y a quelque chose à
+   * montrer.
+   */
   const slides = useMemo<Slide[]>(() => {
-    const videos: Slide[] =
-      trailers.length > 0
-        ? trailers.map((item, position) => ({ type: 'trailer', item, leading: position === 0 }))
-        : [{ type: 'pitch' }];
+    const videos: Slide[] = trailers.map((item, position) => ({
+      type: 'trailer',
+      item,
+      leading: position === 0,
+    }));
+    const shotSlides: Slide[] = shots.map((item, shotIndex) => ({
+      type: 'shot',
+      item,
+      shotIndex,
+    }));
 
-    return [
-      ...videos,
-      ...shots.map((item, shotIndex) => ({ type: 'shot' as const, item, shotIndex })),
-    ];
-  }, [trailers, shots]);
+    if (leadingShot) return [shotSlides[0], ...videos, ...shotSlides.slice(1)];
+    if (videos.length > 0) return [...videos, ...shotSlides];
+    return [{ type: 'pitch' }, ...shotSlides];
+  }, [leadingShot, trailers, shots]);
 
   const title = idea.title || 'Sans titre';
   const capsule = attachments.find((item) => item.id === idea.capsule_file_id) ?? null;

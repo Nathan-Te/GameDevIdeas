@@ -130,18 +130,23 @@ export interface Idea {
   /** Adresse de cette image, ou `null` tant qu'aucune capsule n'est choisie. */
   capsule_url: string | null;
   /**
-   * La bande-annonce **désignée** parmi les pièces `trailer` de l'idée, ou
-   * `null` si Nathan n'en a désigné aucune.
+   * La pièce **désignée** pour ouvrir la visionneuse — une bande-annonce ou,
+   * faute de vidéo, une image (la capsule comprise) —, ou `null` si Nathan n'en
+   * a désigné aucune.
    */
   trailer_file_id: number | null;
   /**
    * Celle qui est réellement en tête : la désignée, ou à défaut la première
    * pièce `trailer`. La règle vit côté serveur, le front la lit — la visionneuse
-   * du store enchaîne toutes les bandes-annonces, celle-ci d'abord.
+   * du store enchaîne ensuite les bandes-annonces puis les captures.
    */
-  leading_trailer_id: number | null;
-  /** Adresse de la bande-annonce en tête, ou `null` s'il n'y en a aucune. */
-  trailer_url: string | null;
+  leading_media_id: number | null;
+  /**
+   * `trailer` ou `image`. Le catalogue ne joue au survol que ce qui se joue.
+   */
+  leading_media_kind: 'trailer' | 'image' | null;
+  /** Adresse de la pièce en tête, ou `null` s'il n'y en a aucune. */
+  leading_media_url: string | null;
   /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
   attachment_count: number;
   /**
@@ -184,8 +189,9 @@ export type StoreIdea = Pick<
   | 'capsule_file_id'
   | 'capsule_url'
   | 'trailer_file_id'
-  | 'leading_trailer_id'
-  | 'trailer_url'
+  | 'leading_media_id'
+  | 'leading_media_kind'
+  | 'leading_media_url'
   | 'updated_at'
 >;
 

@@ -307,9 +307,13 @@ function IdeaCard({
    * Au survol, la bande-annonce remplace la capsule et se joue — comme sur la
    * grille d'un magasin. Elle n'est montée qu'au survol : cinquante vidéos en
    * arrière-plan feraient ramer la page pour un effet qu'on ne voit jamais.
+   *
+   * L'encart central peut être une image depuis qu'une idée sans vidéo peut en
+   * désigner une : il n'y a alors rien à jouer, et la carte garde sa capsule.
    */
+  const trailerUrl = idea.leading_media_kind === 'trailer' ? idea.leading_media_url : null;
   const [playing, setPlaying] = useState(false);
-  const play = () => setPlaying(Boolean(idea.trailer_url));
+  const play = () => setPlaying(Boolean(trailerUrl));
 
   return (
     <article
@@ -322,11 +326,11 @@ function IdeaCard({
       onBlur={() => setPlaying(false)}
     >
       <div className="card__capsule">
-        {playing && idea.trailer_url && (
-          <TrailerMedia className="card__trailer" url={idea.trailer_url} title={title} />
+        {playing && trailerUrl && (
+          <TrailerMedia className="card__trailer" url={trailerUrl} title={title} />
         )}
 
-        {!playing && idea.trailer_url && (
+        {!playing && trailerUrl && (
           <PlayBadge className="card__play" />
         )}
 

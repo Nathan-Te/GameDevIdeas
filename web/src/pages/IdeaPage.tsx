@@ -237,9 +237,9 @@ export function IdeaPage({ slug }: { slug: string }) {
           <Attachments
             slug={idea.slug}
             capsuleFileId={idea.capsule_file_id}
-            leadingTrailerId={idea.leading_trailer_id}
+            leadingMediaId={idea.leading_media_id}
             onCapsuleChange={(capsule_file_id) => save({ capsule_file_id })}
-            onTrailerChange={(trailer_file_id) => save({ trailer_file_id })}
+            onLeadingChange={(trailer_file_id) => save({ trailer_file_id })}
             onCapsuleLost={() =>
               setIdea((current) =>
                 current ? { ...current, capsule_file_id: null, capsule_url: null } : current,
@@ -247,7 +247,7 @@ export function IdeaPage({ slug }: { slug: string }) {
             }
             // La tête a pu passer à la bande-annonce suivante : c'est une règle
             // du serveur, on relit plutôt que de la rejouer ici.
-            onTrailerLost={reload}
+            onLeadingLost={reload}
             onCountChange={setTrailerCount}
           />
 
@@ -284,7 +284,7 @@ export function IdeaPage({ slug }: { slug: string }) {
             <Row label="Bandes-annonces">
               <span className="idea__meta">
                 {trailerCount === 0
-                  ? 'Aucune'
+                  ? 'Aucune — une image mise en tête tiendra l’encart central'
                   : `${trailerCount} — la première ouvre la page store`}
               </span>
             </Row>

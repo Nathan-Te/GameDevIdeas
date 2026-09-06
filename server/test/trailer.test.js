@@ -19,7 +19,7 @@ process.env.DATA_FILES_DIR = filesDir;
 process.env.MAX_TRAILER_MB = '0.01'; // ~10 ko
 process.env.MAX_UPLOAD_MB = '0.02'; // ~20 ko
 
-const { get, makeApp, patch, post, seedIdea } = await import('./helpers.js');
+const { del, get, makeApp, patch, post, seedIdea } = await import('./helpers.js');
 
 test.after(() => rmSync(filesDir, { recursive: true, force: true }));
 
@@ -117,7 +117,7 @@ test('la bande-annonce a sa propre limite de taille, plus haute que les autres',
   );
 });
 
-test('trailer_file_id n’accepte qu’une bande-annonce de cette idée', async (t) => {
+test('trailer_file_id n’accepte qu’une image ou une bande-annonce de cette idée', async (t) => {
   const { app } = await makeApp(t);
   const idea = await seedIdea(app, { title: 'La mienne' });
   const other = await seedIdea(app, { title: 'La voisine' });
@@ -132,9 +132,21 @@ test('trailer_file_id n’accepte qu’une bande-annonce de cette idée', async 
     { filename: 'ailleurs.mp4', type: 'video/mp4', body: 'mp4' },
   ]);
 
-  const wrongKind = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: shot.id });
+  // Une capture est admise depuis qu'une idée sans vidéo peut ouvrir dessus.
+  const image = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: shot.id });
+  assert.equal(image.status, 200);
+  assert.equal(image.body.leading_media_id, shot.id);
+  assert.equal(image.body.leading_media_kind, 'image');
+
+  // Un markdown, lui, ne se montre pas : l'encart central n'en veut pas.
+  const markdown = await upload(app, idea.slug, [
+    { filename: 'notes.md', type: 'text/markdown', body: '# notes' },
+  ]);
+  const wrongKind = await patch(app, `/api/ideas/${idea.slug}`, {
+    trailer_file_id: markdown.body.attachments[0].id,
+  });
   assert.equal(wrongKind.status, 400);
-  assert.match(wrongKind.body.message, /GIF|vidéo/i);
+  assert.match(wrongKind.body.message, /image|GIF|vidéo/i);
 
   const wrongIdea = await patch(app, `/api/ideas/${idea.slug}`, {
     trailer_file_id: neighbour.body.attachments[0].id,
@@ -144,8 +156,43 @@ test('trailer_file_id n’accepte qu’une bande-annonce de cette idée', async 
   const ok = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: trailer.id });
   assert.equal(ok.status, 200);
   assert.equal(ok.body.trailer_file_id, trailer.id);
-  assert.equal(ok.body.leading_trailer_id, trailer.id);
-  assert.match(ok.body.trailer_url, /^\/files\//);
+  assert.equal(ok.body.leading_media_id, trailer.id);
+  assert.equal(ok.body.leading_media_kind, 'trailer');
+  assert.match(ok.body.leading_media_url, /^\/files\//);
+});
+
+/**
+ * L'encart central quand il n'y a aucune vidéo : la capsule tient les deux
+ * places à la fois, et la supprimer libère les deux références d'un coup.
+ */
+test('une image, la capsule comprise, peut tenir l’encart central', async (t) => {
+  const { app } = await makeApp(t);
+  const idea = await seedIdea(app, { title: 'Sans vidéo' });
+
+  const sent = await upload(app, idea.slug, [
+    { filename: 'capsule.png', type: 'image/png', body: 'png' },
+  ]);
+  const capsule = sent.body.attachments[0];
+
+  const both = await patch(app, `/api/ideas/${idea.slug}`, {
+    capsule_file_id: capsule.id,
+    trailer_file_id: capsule.id,
+  });
+  assert.equal(both.status, 200);
+  assert.equal(both.body.capsule_file_id, capsule.id);
+  assert.equal(both.body.leading_media_id, capsule.id);
+  assert.equal(both.body.leading_media_kind, 'image');
+  assert.equal(both.body.capsule_url, both.body.leading_media_url);
+
+  // Aucune bande-annonce n'existe : rien ne doit reprendre la tête toute seule.
+  const removed = await del(app, `/api/attachments/${capsule.id}`);
+  assert.equal(removed.status, 200);
+
+  const after = await get(app, `/api/ideas/${idea.slug}`);
+  assert.equal(after.body.capsule_file_id, null);
+  assert.equal(after.body.trailer_file_id, null);
+  assert.equal(after.body.leading_media_id, null);
+  assert.equal(after.body.leading_media_kind, null);
 });
 
 test('une idée porte plusieurs bandes-annonces ; la première mène, sans rien désigner', async (t) => {
@@ -163,14 +210,14 @@ test('une idée porte plusieurs bandes-annonces ; la première mène, sans rien 
   // repli, déposer une vidéo ne suffirait pas — il faudrait aussi y penser.
   const auto = await get(app, `/api/ideas/${idea.slug}`);
   assert.equal(auto.body.trailer_file_id, null, 'rien n’a été désigné');
-  assert.equal(auto.body.leading_trailer_id, first.id);
-  assert.match(auto.body.trailer_url, /un\.mp4$/);
+  assert.equal(auto.body.leading_media_id, first.id);
+  assert.match(auto.body.leading_media_url, /un\.mp4$/);
 
   // Une désignation explicite l'emporte sur l'ordre.
   const chosen = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: third.id });
   assert.equal(chosen.body.trailer_file_id, third.id);
-  assert.equal(chosen.body.leading_trailer_id, third.id);
-  assert.match(chosen.body.trailer_url, /trois\.gif$/);
+  assert.equal(chosen.body.leading_media_id, third.id);
+  assert.match(chosen.body.leading_media_url, /trois\.gif$/);
 
   // Et les trois restent des pièces de l'idée : la visionneuse les enchaîne.
   const list = await get(app, `/api/ideas/${idea.slug}/attachments`);
@@ -191,8 +238,8 @@ test('retirer la désignation rend la tête à la première, pas au vide', async
 
   const cleared = await patch(app, `/api/ideas/${idea.slug}`, { trailer_file_id: null });
   assert.equal(cleared.body.trailer_file_id, null, 'plus rien n’est désigné');
-  assert.equal(cleared.body.leading_trailer_id, first.id, 'la première reprend la tête');
-  assert.match(cleared.body.trailer_url, /un\.mp4$/);
+  assert.equal(cleared.body.leading_media_id, first.id, 'la première reprend la tête');
+  assert.match(cleared.body.leading_media_url, /un\.mp4$/);
 });
 
 test('la bande-annonce se libère quand la pièce est supprimée', async (t) => {
@@ -213,13 +260,13 @@ test('la bande-annonce se libère quand la pièce est supprimée', async (t) => 
 
   const afterFirst = await get(app, `/api/ideas/${idea.slug}`);
   assert.equal(afterFirst.body.trailer_file_id, null, 'la référence est libérée avec la pièce');
-  assert.equal(afterFirst.body.leading_trailer_id, second.id, 'la suivante prend la tête');
+  assert.equal(afterFirst.body.leading_media_id, second.id, 'la suivante prend la tête');
 
   // La dernière partie : l'idée n'a plus de bande-annonce du tout.
   await app.inject({ method: 'DELETE', url: `/api/attachments/${second.id}` });
   const empty = await get(app, `/api/ideas/${idea.slug}`);
-  assert.equal(empty.body.leading_trailer_id, null);
-  assert.equal(empty.body.trailer_url, null);
+  assert.equal(empty.body.leading_media_id, null);
+  assert.equal(empty.body.leading_media_url, null);
 });
 
 test('la bande-annonce est servie sur le catalogue comme la capsule', async (t) => {
@@ -237,8 +284,8 @@ test('la bande-annonce est servie sur le catalogue comme la capsule', async (t) 
   // même requête que le reste, pas par un appel par carte.
   const list = await get(app, '/api/ideas');
   const listed = list.body.ideas.find((item) => item.slug === idea.slug);
-  assert.match(listed.trailer_url, /moment\.gif$/);
-  assert.equal(listed.leading_trailer_id, uploaded.body.attachments[0].id);
+  assert.match(listed.leading_media_url, /moment\.gif$/);
+  assert.equal(listed.leading_media_id, uploaded.body.attachments[0].id);
 });
 
 test('purger une idée qui a une bande-annonce n’échoue pas sur la référence', async (t) => {

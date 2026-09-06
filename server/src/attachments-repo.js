@@ -189,27 +189,36 @@ export function assertUsableAsCapsule(db, ideaId, attachmentId) {
 }
 
 /**
- * La bande-annonce doit être une pièce `trailer` de cette idée — un GIF ou une
- * courte vidéo. Une capture n'est pas une bande-annonce, et la visionneuse de
- * la vue store la jouerait en boucle sans jamais rien montrer.
+ * La pièce **en tête** de la visionneuse doit appartenir à cette idée, et être
+ * quelque chose qu'un magasin met dans son encart central : une bande-annonce
+ * (GIF ou vidéo) ou une image.
+ *
+ * L'image y est admise parce qu'une idée sans bande-annonce n'a rien à montrer :
+ * la carte de texte du lot 3b vaut mieux que rien, mais une capture vaut mieux
+ * qu'elle. La capsule est une image de l'idée comme une autre : elle peut donc
+ * tenir les deux places à la fois, l'encart central et la colonne de droite.
+ *
+ * Rien n'interdit de désigner une image alors qu'une bande-annonce existe : le
+ * champ ne dit pas « la bande-annonce » mais « celle qui ouvre la marche ».
  */
-export function assertUsableAsTrailer(db, ideaId, attachmentId) {
+export function assertUsableAsLeadingMedia(db, ideaId, attachmentId) {
   return assertUsableAs(
     db,
     ideaId,
     attachmentId,
-    'trailer',
-    'La bande-annonce doit être un GIF ou une vidéo (.gif, .mp4, .webm).',
+    ['trailer', 'image'],
+    "L'encart central doit être une image, un GIF ou une vidéo (.gif, .mp4, .webm).",
   );
 }
 
-function assertUsableAs(db, ideaId, attachmentId, kind, message) {
+function assertUsableAs(db, ideaId, attachmentId, kinds, message) {
+  const allowed = Array.isArray(kinds) ? kinds : [kinds];
   const attachment = findAttachment(db, attachmentId);
 
   if (!attachment || attachment.idea_id !== ideaId) {
     throw badRequest(`La pièce jointe n° ${attachmentId} n'appartient pas à cette idée.`);
   }
-  if (attachment.kind !== kind) {
+  if (!allowed.includes(attachment.kind)) {
     throw badRequest(message);
   }
 

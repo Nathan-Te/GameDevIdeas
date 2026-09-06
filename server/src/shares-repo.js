@@ -94,8 +94,9 @@ export function shareIdeas(db, shareId) {
     .prepare(
       `SELECT i.*, si.position AS share_position,
               c.path AS capsule_path,
-              t.id   AS leading_trailer_id,
-              t.path AS trailer_path,
+              t.id   AS leading_media_id,
+              t.kind AS leading_media_kind,
+              t.path AS leading_media_path,
               (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count,
               -- Les mêmes agrégats que le catalogue : l'écran des partages
               -- affiche, sélection par sélection, ce que chaque idée a récolté.
@@ -145,8 +146,9 @@ export function publicIdea(idea) {
     capsule_file_id: idea.capsule_file_id,
     capsule_url: idea.capsule_url,
     trailer_file_id: idea.trailer_file_id,
-    leading_trailer_id: idea.leading_trailer_id,
-    trailer_url: idea.trailer_url,
+    leading_media_id: idea.leading_media_id,
+    leading_media_kind: idea.leading_media_kind,
+    leading_media_url: idea.leading_media_url,
     updated_at: idea.updated_at,
   };
 }

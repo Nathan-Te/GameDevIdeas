@@ -1,4 +1,4 @@
-import { assertUsableAsCapsule, assertUsableAsTrailer } from './attachments-repo.js';
+import { assertUsableAsCapsule, assertUsableAsLeadingMedia } from './attachments-repo.js';
 import { notFound } from './errors.js';
 import { assertFamilyExists } from './families-repo.js';
 import { fileUrl } from './files.js';
@@ -32,7 +32,7 @@ const CURRENT_VERDICT_JOIN = `
 const CAPSULE_JOIN = 'LEFT JOIN attachments c ON c.id = i.capsule_file_id';
 
 /**
- * Même raison pour la bande-annonce : le catalogue la joue au survol des
+ * Même raison pour l'encart central : le catalogue le joue au survol des
  * cartes, donc il lui faut son adresse dans la même requête que la capsule.
  *
  * Une idée peut porter plusieurs bandes-annonces — la visionneuse du store les
@@ -41,10 +41,15 @@ const CAPSULE_JOIN = 'LEFT JOIN attachments c ON c.id = i.capsule_file_id';
  * repli, déposer une vidéo ne suffirait pas : il faudrait aussi penser à
  * cliquer « mettre en tête » pour que le catalogue la joue au survol.
  *
- * La règle est écrite ici, une fois : le front lit `leading_trailer_id`, il ne
- * la recalcule pas.
+ * La désignation peut aussi tomber sur une **image** : une idée sans vidéo a le
+ * droit d'ouvrir sur une capture plutôt que sur la carte de texte, et la capsule
+ * est une image comme une autre. Le repli, lui, ne cherche que des vidéos — une
+ * capture ne se hisse jamais en tête toute seule.
+ *
+ * La règle est écrite ici, une fois : le front lit `leading_media_id` et
+ * `leading_media_kind`, il ne les recalcule pas.
  */
-const TRAILER_JOIN = `
+const LEADING_MEDIA_JOIN = `
   LEFT JOIN attachments t ON t.id = COALESCE(
     i.trailer_file_id,
     (SELECT a.id FROM attachments a
@@ -61,8 +66,9 @@ const SELECT_IDEA = `
          v.note       AS verdict_note,
          v.created_at AS verdict_created_at,
          c.path       AS capsule_path,
-         t.id         AS leading_trailer_id,
-         t.path       AS trailer_path,
+         t.id         AS leading_media_id,
+         t.kind       AS leading_media_kind,
+         t.path       AS leading_media_path,
          (SELECT COUNT(*) FROM attachments a WHERE a.idea_id = i.id) AS attachment_count,
          (SELECT COUNT(*) FROM reviews r WHERE r.idea_id = i.id)        AS friend_review_count,
          (SELECT AVG(r.score) FROM reviews r WHERE r.idea_id = i.id)    AS friend_score_avg,
@@ -70,7 +76,7 @@ const SELECT_IDEA = `
   FROM ideas i
   ${CURRENT_VERDICT_JOIN}
   ${CAPSULE_JOIN}
-  ${TRAILER_JOIN}
+  ${LEADING_MEDIA_JOIN}
 `;
 
 /** Sépare la ligne SQL plate en idée + verdict courant imbriqué. */
@@ -91,11 +97,16 @@ export function serializeIdea(row) {
     /** La bande-annonce **désignée**, ou `null` si Nathan n'en a désigné aucune. */
     trailer_file_id: row.trailer_file_id ?? null,
     /**
-     * Celle qui est réellement en tête : la désignée, ou à défaut la première
-     * pièce `trailer` de l'idée. C'est elle que joue le catalogue au survol et
-     * qui ouvre la visionneuse du store.
+     * Celle qui est réellement en tête : la désignée — bande-annonce **ou**
+     * image —, ou à défaut la première pièce `trailer` de l'idée. C'est elle qui
+     * ouvre la visionneuse du store.
      */
-    leading_trailer_id: row.leading_trailer_id ?? null,
+    leading_media_id: row.leading_media_id ?? null,
+    /**
+     * `trailer` ou `image`. Le catalogue en a besoin : il ne joue au survol que
+     * ce qui se joue, et mettre une image dans un `<video>` ne montre rien.
+     */
+    leading_media_kind: row.leading_media_kind ?? null,
     /**
      * Date de mise en liste de souhaits, `null` sinon. Servie partout où une
      * idée est servie : le catalogue marque ses cartes, la vue store dessine
@@ -105,10 +116,11 @@ export function serializeIdea(row) {
     /** Adresse de l'image de capsule, nulle tant qu'aucune n'est choisie. */
     capsule_url: fileUrl(row.capsule_path),
     /**
-     * Adresse de la bande-annonce en tête. Servie partout où une idée l'est :
-     * le catalogue la joue au survol, la vue store ouvre dessus.
+     * Adresse de la pièce en tête. Servie partout où une idée l'est : le
+     * catalogue la joue au survol quand c'est une vidéo, la vue store ouvre
+     * dessus dans tous les cas.
      */
-    trailer_url: fileUrl(row.trailer_path),
+    leading_media_url: fileUrl(row.leading_media_path),
     /** Nombre de pièces jointes : la corbeille annonce ce qu'une purge emporte. */
     attachment_count: row.attachment_count ?? 0,
     /**
@@ -292,7 +304,7 @@ export function updateIdea(db, slug, patch = {}) {
 
   if (Object.hasOwn(patch, 'trailer_file_id')) {
     if (patch.trailer_file_id !== null) {
-      assertUsableAsTrailer(db, existing.id, patch.trailer_file_id);
+      assertUsableAsLeadingMedia(db, existing.id, patch.trailer_file_id);
     }
     sets.push('trailer_file_id = @trailer_file_id');
     params.trailer_file_id = patch.trailer_file_id;

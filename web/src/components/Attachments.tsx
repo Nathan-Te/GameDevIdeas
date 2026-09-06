@@ -23,25 +23,26 @@ interface AttachmentsProps {
   slug: string;
   capsuleFileId: number | null;
   /**
-   * La bande-annonce **en tête** : la désignée, ou la première à défaut. Une
-   * idée peut en porter plusieurs — la visionneuse du store les enchaîne — et
-   * c'est celle-ci qui ouvre la marche et que joue le catalogue au survol.
+   * La pièce **en tête** : la désignée — bande-annonce ou image —, ou la
+   * première bande-annonce à défaut. C'est elle qui ouvre la visionneuse du
+   * store, et que le catalogue joue au survol quand c'est une vidéo.
    */
-  leadingTrailerId: number | null;
+  leadingMediaId: number | null;
   /** Enregistre la capsule côté idée ; la page idée en garde la maîtrise. */
   onCapsuleChange: (id: number | null) => void | Promise<void>;
-  /** Met une bande-annonce en tête. Il y en a toujours une : jamais `null`. */
-  onTrailerChange: (id: number) => void | Promise<void>;
+  /** Met une pièce en tête. On en désigne une, on n'en retire pas : jamais `null`. */
+  onLeadingChange: (id: number) => void | Promise<void>;
   /**
    * Appelé quand la capsule vient de disparaître avec sa pièce jointe : le
    * serveur a déjà remis `capsule_file_id` à `null`, la page doit le refléter.
    */
   onCapsuleLost: () => void;
   /**
-   * Appelé quand une bande-annonce vient d'être supprimée : la tête a pu passer
-   * à la suivante côté serveur, la page doit relire l'idée plutôt que deviner.
+   * Appelé quand une bande-annonce, ou la pièce en tête, vient d'être
+   * supprimée : la tête a pu passer à la suivante côté serveur, la page doit
+   * relire l'idée plutôt que deviner.
    */
-  onTrailerLost: () => void;
+  onLeadingLost: () => void;
   /**
    * Le nombre de bandes-annonces, remonté à chaque changement de la liste : la
    * fiche de la page idée l'annonce, et c'est le seul bloc de la page qui n'a
@@ -53,11 +54,11 @@ interface AttachmentsProps {
 export function Attachments({
   slug,
   capsuleFileId,
-  leadingTrailerId,
+  leadingMediaId,
   onCapsuleChange,
-  onTrailerChange,
+  onLeadingChange,
   onCapsuleLost,
-  onTrailerLost,
+  onLeadingLost,
   onCountChange,
 }: AttachmentsProps) {
   const [attachments, setAttachments] = useState<Attachment[] | null>(null);
@@ -178,7 +179,9 @@ export function Attachments({
       setAttachments((current) => (current ?? []).filter((item) => item.id !== attachment.id));
       // Le serveur a déjà libéré capsule et bande-annonce : la page doit le savoir.
       if (attachment.id === capsuleFileId) onCapsuleLost();
-      if (attachment.kind === 'trailer') onTrailerLost();
+      // La tête peut être une image depuis qu'un encart central se désigne :
+      // supprimer celle-là la libère aussi, il faut relire.
+      if (attachment.kind === 'trailer' || attachment.id === leadingMediaId) onLeadingLost();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Suppression impossible.');
     }
@@ -284,14 +287,14 @@ export function Attachments({
         <AttachmentList
           attachments={attachments}
           capsuleFileId={capsuleFileId}
-          leadingTrailerId={leadingTrailerId}
+          leadingMediaId={leadingMediaId}
           images={images}
           onReorder={commitOrder}
           onRename={rename}
           onRetype={retype}
           onRemove={remove}
           onCapsuleChange={onCapsuleChange}
-          onTrailerChange={onTrailerChange}
+          onLeadingChange={onLeadingChange}
           onView={setViewing}
         />
       )}
@@ -407,26 +410,26 @@ function LinkField({ onSubmit }: { onSubmit: (url: string) => Promise<void> }) {
 function AttachmentList({
   attachments,
   capsuleFileId,
-  leadingTrailerId,
+  leadingMediaId,
   images,
   onReorder,
   onRename,
   onRetype,
   onRemove,
   onCapsuleChange,
-  onTrailerChange,
+  onLeadingChange,
   onView,
 }: {
   attachments: Attachment[];
   capsuleFileId: number | null;
-  leadingTrailerId: number | null;
+  leadingMediaId: number | null;
   images: Attachment[];
   onReorder: (ordered: Attachment[]) => void | Promise<void>;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
   onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
-  onTrailerChange: (id: number) => void | Promise<void>;
+  onLeadingChange: (id: number) => void | Promise<void>;
   onView: (index: number) => void;
 }) {
   /**
@@ -521,13 +524,13 @@ function AttachmentList({
           <AttachmentCard
             attachment={attachment}
             isCapsule={attachment.id === capsuleFileId}
-            isTrailer={attachment.id === leadingTrailerId}
+            isLeading={attachment.id === leadingMediaId}
             galleryIndex={images.findIndex((image) => image.id === attachment.id)}
             onRename={onRename}
             onRetype={onRetype}
             onRemove={onRemove}
             onCapsuleChange={onCapsuleChange}
-            onTrailerChange={onTrailerChange}
+            onLeadingChange={onLeadingChange}
             onView={onView}
           />
         </li>
@@ -539,24 +542,24 @@ function AttachmentList({
 function AttachmentCard({
   attachment,
   isCapsule,
-  isTrailer,
+  isLeading,
   galleryIndex,
   onRename,
   onRetype,
   onRemove,
   onCapsuleChange,
-  onTrailerChange,
+  onLeadingChange,
   onView,
 }: {
   attachment: Attachment;
   isCapsule: boolean;
-  isTrailer: boolean;
+  isLeading: boolean;
   galleryIndex: number;
   onRename: (attachment: Attachment, label: string) => Promise<void>;
   onRetype: (attachment: Attachment, type: LinkType) => void | Promise<void>;
   onRemove: (attachment: Attachment) => void;
   onCapsuleChange: (id: number | null) => void | Promise<void>;
-  onTrailerChange: (id: number) => void | Promise<void>;
+  onLeadingChange: (id: number) => void | Promise<void>;
   onView: (index: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -603,7 +606,7 @@ function AttachmentCard({
             onSave={(label) => onRename(attachment, label)}
           />
           {isCapsule && <span className="attachment__flag">capsule</span>}
-          {isTrailer && <span className="attachment__flag">en tête</span>}
+          {isLeading && <span className="attachment__flag">en tête</span>}
         </div>
 
         <p className="attachment__meta">
@@ -666,12 +669,17 @@ function AttachmentCard({
         )}
 
         {/* Pas de « retirer » : la visionneuse a toujours une première place,
-            et la rendre vide n'a pas de sens. On met une autre en tête. */}
-        {attachment.kind === 'trailer' && !isTrailer && (
+            et la rendre vide n'a pas de sens. On met une autre en tête.
+
+            Une image y a droit comme une bande-annonce : une idée sans vidéo
+            ouvre alors sur une capture plutôt que sur la carte de texte, et la
+            capsule peut tenir les deux places à la fois. */}
+        {(attachment.kind === 'trailer' || attachment.kind === 'image') && !isLeading && (
           <button
             type="button"
             className="attachment__action"
-            onClick={() => void onTrailerChange(attachment.id)}
+            onClick={() => void onLeadingChange(attachment.id)}
+            title="Ouvrir la visionneuse de la page store sur cette pièce"
           >
             Mettre en tête
           </button>
